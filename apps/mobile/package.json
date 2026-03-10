@@ -1,0 +1,28 @@
+{
+  "name": "@dacus/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "lint": "npm exec eslint -- App.tsx src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
+    "babel-preset-expo": "~54.0.10",
+    "expo": "~54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "typescript": "^5.9.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "vitest": "^3.0.8"
+  }
+}
