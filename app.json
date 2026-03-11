@@ -3,9 +3,7 @@
     "name": "Dacus.ro",
     "slug": "dacusapp",
     "icon": "./apps/mobile/assets/icon.png",
-    "plugins": [
-      "./apps/mobile/plugins/withFirebaseAppDelegate"
-    ],
+    "plugins": [],
     "splash": {
       "image": "./apps/mobile/assets/icon.png",
       "resizeMode": "contain",
