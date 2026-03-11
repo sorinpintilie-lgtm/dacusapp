@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Dacus.ro",
+    "slug": "dacusapp",
+    "icon": "./apps/mobile/assets/icon.png",
+    "plugins": [
+      "./apps/mobile/plugins/withFirebaseAppDelegate"
+    ],
+    "splash": {
+      "image": "./apps/mobile/assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "092f9915-4e7c-482c-b05d-d29eb0961a69"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "ro.dacus.mobile",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "CFBundleDisplayName": "Dacus.ro",
+        "CFBundleName": "Dacus.ro",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

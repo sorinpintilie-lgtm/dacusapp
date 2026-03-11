@@ -9,3 +9,9 @@ dist/
 !.env.example
 coverage/
 
+# Firebase secrets
+GoogleService-Info.plist
+!GoogleService-Info.plist
+google-services.json
+*firebase-adminsdk*.json
+

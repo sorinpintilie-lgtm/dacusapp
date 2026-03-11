@@ -1,13 +1,16 @@
 {
   "expo": {
-    "name": "Dacus",
+    "name": "Dacus.ro",
     "slug": "dacus-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "plugins": [
+      "./plugins/withFirebaseAppDelegate"
+    ],
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -16,11 +19,12 @@
     ],
     "ios": {
       "supportsTablet": false,
+      "googleServicesFile": "../../GoogleService-Info.plist",
       "bundleIdentifier": "ro.dacus.mobile"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "ro.dacus.mobile"
