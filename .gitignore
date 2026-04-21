@@ -9,6 +9,16 @@ dist/
 !.env.example
 coverage/
 
+# Generated mobile export artifacts
+apps/mobile/.expo-export-test/
+apps/mobile/out-android*/
+apps/mobile/out-ios/
+out-android-root*/
+out-ios-root/
+
+# Generated Firebase API bundle
+functions/api-dist/
+
 # Firebase secrets
 GoogleService-Info.plist
 !GoogleService-Info.plist

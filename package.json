@@ -12,9 +12,13 @@
   "scripts": {
     "dev:api": "npm run dev -w @dacus/api",
     "dev:mobile": "npm run start -w @dacus/mobile",
+    "build:api": "npm run build -w @dacus/api",
+    "firebase:serve": "firebase emulators:start --only functions",
+    "firebase:deploy": "firebase deploy --only functions:api",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "verify:mobile:release": "npm run verify:release -w @dacus/mobile",
     "format": "prettier . --write",
     "format:check": "prettier . --check"
   },
@@ -26,5 +30,21 @@
     "prettier": "^3.5.3",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.26.1"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "15.1.1",
+    "expo": "~54.0.33",
+    "expo-file-system": "~19.0.3",
+    "expo-font": "14.0.11",
+    "expo-image": "~3.0.11",
+    "expo-splash-screen": "~31.0.13",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-svg": "15.12.1",
+    "zod": "^3.24.2"
+  },
+  "overrides": {
+    "expo-font": "14.0.11"
   }
 }

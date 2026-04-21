@@ -3,6 +3,8 @@ export const colors = {
   surface: '#FFFFFF',
   surfaceAlt: '#F6F6F7',
   surfaceSoft: '#F2F3F5',
+  surfaceRaised: '#FFFFFF',
+  surfaceOverlay: 'rgba(255,255,255,0.92)',
   surfaceDark: '#15171B',
   textPrimary: '#1E1E22',
   textSecondary: '#5A5A64',
@@ -10,6 +12,10 @@ export const colors = {
   brandRed: '#E30613',
   brandBlack: '#2B2B2F',
   brandAmber: '#FFB800',
+  semanticSuccessBg: '#E8F5EE',
+  semanticWarningBg: '#FFF6E8',
+  semanticInfoBg: '#E9F3FB',
+  semanticDangerBg: '#FDEBEC',
   border: '#E7E8EA',
   success: '#007A4D',
   warning: '#B45309',
@@ -20,12 +26,12 @@ export const colors = {
 
 export const spacing = {
   xxs: 4,
-  xs: 6,
-  sm: 10,
-  md: 14,
-  lg: 18,
-  xl: 24,
-  xxl: 32,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 22,
+  xl: 30,
+  xxl: 40,
 };
 
 export const radii = {
@@ -34,6 +40,29 @@ export const radii = {
   lg: 18,
   xl: 24,
   pill: 999,
+};
+
+export const elevation = {
+  soft: {
+    shadowColor: '#0B1020',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#0B1020',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+};
+
+export const motion = {
+  quick: 140,
+  normal: 220,
+  dramatic: 340,
 };
 
 export const typography = {

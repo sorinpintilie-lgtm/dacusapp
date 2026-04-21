@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22",
+    "predeploy": [
+      "npm --prefix functions install",
+      "npm --prefix apps/api run build",
+      "node -e \"const fs=require('fs');fs.rmSync('functions/api-dist',{recursive:true,force:true});fs.cpSync('apps/api/dist','functions/api-dist',{recursive:true});\""
+    ]
+  },
+  "emulators": {
+    "singleProjectMode": true,
+    "firestore": {
+      "port": 8080
+    }
+  }
+}

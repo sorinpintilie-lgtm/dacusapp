@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
-import { readCatalogCache, writeCatalogCache } from '../services/catalogCache';
-import { loadLiveCatalog, streamLiveCatalogProductsAfterCursor } from '../services/storefront';
+import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
+import {
+  loadCatalogStamp,
+  loadLiveCatalog,
+  streamLiveCatalogProductsAfterCursor,
+} from '../services/storefront';
 import { buildProductIndexes } from '../utils/catalogFilters';
+
+const CATALOG_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 type CatalogState = {
   categories: CatalogCategory[];
@@ -13,12 +19,21 @@ type CatalogState = {
   catalogLoading: boolean;
   catalogError: string | null;
   catalogMeta: string;
+  setCatalogError: (value: string | null) => void;
+  setCatalogMeta: (value: string) => void;
+  upsertProducts: (items: CatalogProduct[]) => void;
   setSelectedCategoryId: (value: string) => void;
   setSelectedProductId: (value: string) => void;
   selectedCategory?: CatalogCategory;
   selectedProduct?: CatalogProduct;
   countByCategory: Map<string, number>;
   productsById: Map<string, CatalogProduct>;
+};
+
+const mergeProductsById = (base: CatalogProduct[], incoming: CatalogProduct[]) => {
+  const merged = new Map(base.map((item) => [item.id, item]));
+  incoming.forEach((item) => merged.set(item.id, item));
+  return Array.from(merged.values());
 };
 
 export const useCatalog = (): CatalogState => {
@@ -30,13 +45,117 @@ export const useCatalog = (): CatalogState => {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogMeta, setCatalogMeta] = useState('Catalog live: se încarcă...');
 
+  const upsertProducts = useCallback((items: CatalogProduct[]) => {
+    if (!Array.isArray(items) || items.length === 0) return;
+    setProducts((prev) => {
+      const merged = new Map(prev.map((item) => [item.id, item]));
+      items.forEach((item) => merged.set(item.id, item));
+      return Array.from(merged.values());
+    });
+  }, []);
+
   useEffect(() => {
     let active = true;
 
     const hydrateCatalog = async () => {
-      const cached = await readCatalogCache();
+      console.log('[BOOT][useCatalog] hydrateCatalog start');
+      const cachedEntry = await readCatalogCacheEntry();
+      const cached = cachedEntry?.payload ?? null;
+      const now = Date.now();
+
+      const collectInvalidProductShape = (items: unknown[]) =>
+        items.filter((item) => {
+          if (!item || typeof item !== 'object') return true;
+          const candidate = item as {
+            id?: unknown;
+            brand?: unknown;
+            stockLabel?: unknown;
+            priceRon?: unknown;
+          };
+          return (
+            typeof candidate.id !== 'string' ||
+            candidate.id.length === 0 ||
+            typeof candidate.brand !== 'string' ||
+            candidate.brand.length === 0 ||
+            typeof candidate.stockLabel !== 'string' ||
+            typeof candidate.priceRon !== 'number' ||
+            !Number.isFinite(candidate.priceRon)
+          );
+        });
+
+      const loadRemainingCatalogPages = async (params: {
+        startCursor: string | null;
+        seedProducts: CatalogProduct[];
+        seedCategories: CatalogCategory[];
+        stamp: string | null;
+      }) => {
+        if (!params.startCursor) return;
+
+        let mergedProducts = params.seedProducts;
+        let streamedSoFar = 0;
+
+        try {
+          const streamedTotal = await streamLiveCatalogProductsAfterCursor(
+            params.startCursor,
+            (pageProducts, loadedTotal) => {
+              streamedSoFar = loadedTotal;
+              if (!active || pageProducts.length === 0) return;
+
+              setProducts((prev) => {
+                mergedProducts = mergeProductsById(prev, pageProducts);
+                return mergedProducts;
+              });
+
+              setCatalogMeta(
+                `Catalog live: ${params.seedProducts.length + loadedTotal} produse încărcate.`,
+              );
+            },
+            { pageSize: 80, leanQuery: true },
+          );
+
+          if (!active) return;
+
+          const finalTotal = params.seedProducts.length + streamedTotal;
+          setCatalogMeta(`Catalog live: ${finalTotal} produse încărcate.`);
+
+          if (mergedProducts.length > 0) {
+            await writeCatalogCache(
+              {
+                categories: params.seedCategories,
+                products: mergedProducts,
+                hasMoreProducts: false,
+                productsCursor: null,
+              },
+              { stamp: params.stamp },
+            );
+          }
+        } catch {
+          if (!active) return;
+
+          setCatalogMeta(
+            streamedSoFar > 0
+              ? `Catalog live: ${params.seedProducts.length + streamedSoFar} produse încărcate (sync parțial).`
+              : `Catalog live: ${params.seedProducts.length} produse încărcate (sync extins indisponibil).`,
+          );
+        }
+      };
 
       if (active && cached) {
+        const invalidCachedProducts = collectInvalidProductShape(cached.products as unknown[]);
+        console.log('[BOOT][useCatalog] cache payload diagnostics', {
+          categories: cached.categories.length,
+          products: cached.products.length,
+          invalidProductShapeCount: invalidCachedProducts.length,
+          cacheAgeMs: cachedEntry ? Math.max(0, now - cachedEntry.cachedAt) : null,
+          stamp: cachedEntry?.stamp ?? null,
+        });
+        if (invalidCachedProducts.length > 0) {
+          const sample = invalidCachedProducts.slice(0, 3);
+          console.error('[BOOT][useCatalog] cache contains products with unexpected shape', {
+            sample,
+          });
+        }
+
         if (cached.categories.length) {
           setCategories(cached.categories);
           setSelectedCategoryId((prev) => prev || cached.categories[0]?.id || '');
@@ -52,8 +171,63 @@ export const useCatalog = (): CatalogState => {
       }
 
       try {
-        const live = await loadLiveCatalog({ pageSize: 60, leanQuery: true, includeCategories: true });
+        const cacheAgeMs = cachedEntry
+          ? Math.max(0, now - cachedEntry.cachedAt)
+          : Number.POSITIVE_INFINITY;
+        const cacheIsFreshEnough = cacheAgeMs <= CATALOG_CACHE_MAX_AGE_MS;
+        const stampPayload = cachedEntry ? await loadCatalogStamp() : null;
+        const stampMatchesCache =
+          !!cachedEntry &&
+          typeof cachedEntry.stamp === 'string' &&
+          cachedEntry.stamp.length > 0 &&
+          stampPayload?.stamp === cachedEntry.stamp;
+        const canSkipRefresh =
+          !!cachedEntry &&
+          ((stampMatchesCache && cacheIsFreshEnough) || (!stampPayload && cacheIsFreshEnough));
+
+        if (canSkipRefresh) {
+          if (cached) {
+            const freshnessMins = Math.max(1, Math.round(cacheAgeMs / 60_000));
+            setCatalogMeta(
+              stampMatchesCache
+                ? `Catalog cache: validat în fundal (${cached.products.length} produse, actualizat acum ~${freshnessMins} min).`
+                : `Catalog cache: folosit rapid (${cached.products.length} produse). Verificare live amânată.`,
+            );
+
+            if (cached.hasMoreProducts && cached.productsCursor) {
+              void loadRemainingCatalogPages({
+                startCursor: cached.productsCursor,
+                seedProducts: cached.products,
+                seedCategories: cached.categories,
+                stamp: cachedEntry?.stamp ?? null,
+              });
+            }
+          }
+          setCatalogError(null);
+          return;
+        }
+
+        const live = await loadLiveCatalog({
+          pageSize: 60,
+          leanQuery: true,
+          includeCategories: true,
+        });
         if (!active) return;
+
+        const invalidLiveProducts = collectInvalidProductShape(live.products as unknown[]);
+        console.log('[BOOT][useCatalog] live payload diagnostics', {
+          categories: live.categories.length,
+          products: live.products.length,
+          hasMoreProducts: live.hasMoreProducts,
+          productsCursor: live.productsCursor,
+          invalidProductShapeCount: invalidLiveProducts.length,
+        });
+        if (invalidLiveProducts.length > 0) {
+          const sample = invalidLiveProducts.slice(0, 3);
+          console.error('[BOOT][useCatalog] live catalog contains products with unexpected shape', {
+            sample,
+          });
+        }
 
         if (live.categories.length) {
           setCategories(live.categories);
@@ -65,51 +239,35 @@ export const useCatalog = (): CatalogState => {
           setSelectedProductId((prev) => prev || live.products[0]?.id || '');
         }
 
-        await writeCatalogCache(live);
+        await writeCatalogCache(live, { stamp: stampPayload?.stamp ?? null });
 
-        if (live.hasMoreProducts && live.productsCursor && live.categories.length > 0) {
-          setCatalogMeta(`Catalog live: încărcare inițială ${live.products.length} produse, continuă în fundal...`);
+        setCatalogMeta(
+          live.hasMoreProducts
+            ? `Catalog live: ${live.products.length} produse încărcate inițial (restul în fundal).`
+            : `Catalog live: ${live.products.length} produse încărcate.`,
+        );
 
-          streamLiveCatalogProductsAfterCursor(
-            live.productsCursor,
-            (pageProducts, loadedTotal) => {
-              if (!active || pageProducts.length === 0) return;
-              setProducts((prev) => {
-                const merged = new Map(prev.map((item) => [item.id, item]));
-                pageProducts.forEach((item) => merged.set(item.id, item));
-                return Array.from(merged.values());
-              });
-              setCatalogMeta(`Catalog live: ${live.products.length + loadedTotal} produse încărcate...`);
-            },
-            { pageSize: 80, leanQuery: true },
-          )
-            .then((loadedTotal) => {
-              if (!active) return;
-              setCatalogMeta(`Catalog live: ${live.products.length + loadedTotal} produse încărcate complet.`);
-              setProducts((currentProducts) => {
-                const fullPayload = {
-                  ...live,
-                  products: currentProducts,
-                  hasMoreProducts: false,
-                  productsCursor: null,
-                };
-                void writeCatalogCache(fullPayload);
-                return currentProducts;
-              });
-            })
-            .catch(() => {
-              if (!active) return;
-              setCatalogMeta('Catalog live: încărcare parțială finalizată (fundal întrerupt).');
-            });
-        } else {
-          setCatalogMeta(`Catalog live: ${live.products.length} produse încărcate.`);
+        if (live.hasMoreProducts && live.productsCursor) {
+          void loadRemainingCatalogPages({
+            startCursor: live.productsCursor,
+            seedProducts: live.products,
+            seedCategories: live.categories,
+            stamp: stampPayload?.stamp ?? null,
+          });
         }
 
         setCatalogError(null);
-      } catch {
+      } catch (error) {
         if (!active) return;
+        console.error('[BOOT][useCatalog] hydrateCatalog failed', {
+          error,
+        });
         setCatalogError('Nu s-a putut încărca catalogul live momentan.');
-        setCatalogMeta('Catalog live indisponibil momentan.');
+        setCatalogMeta(
+          cached && cached.products.length > 0
+            ? `Catalog cache activ (${cached.products.length} produse). Reîmprospătarea live a eșuat.`
+            : 'Catalog live indisponibil momentan. Reîncearcă în câteva momente.',
+        );
       } finally {
         if (active) setCatalogLoading(false);
       }
@@ -144,7 +302,10 @@ export const useCatalog = (): CatalogState => {
     [products, selectedProductId],
   );
 
-  const { productsById, countByCategory } = useMemo(() => buildProductIndexes(products), [products]);
+  const { productsById, countByCategory } = useMemo(
+    () => buildProductIndexes(products),
+    [products],
+  );
 
   return {
     categories,
@@ -154,6 +315,9 @@ export const useCatalog = (): CatalogState => {
     catalogLoading,
     catalogError,
     catalogMeta,
+    setCatalogError,
+    setCatalogMeta,
+    upsertProducts,
     setSelectedCategoryId,
     setSelectedProductId,
     selectedCategory,

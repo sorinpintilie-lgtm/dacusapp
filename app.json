@@ -2,19 +2,35 @@
   "expo": {
     "name": "Dacus.ro",
     "slug": "dacusapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
     "icon": "./apps/mobile/assets/icon.png",
-    "plugins": [],
+    "plugins": [
+      "expo-font"
+    ],
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./apps/mobile/assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "extra": {
       "eas": {
         "projectId": "092f9915-4e7c-482c-b05d-d29eb0961a69"
+      },
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./apps/mobile/assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
       }
     },
     "ios": {
+      "supportsTablet": false,
       "bundleIdentifier": "ro.dacus.mobile",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {

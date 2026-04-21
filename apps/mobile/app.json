@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "plugins": [
-      "./plugins/withFirebaseAppDelegate"
+      "expo-font"
     ],
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -34,4 +34,3 @@
     }
   }
 }
-

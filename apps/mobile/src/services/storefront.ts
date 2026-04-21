@@ -12,8 +12,10 @@ type CatalogApiPayload = {
 export type LiveCatalogProduct = {
   id: string;
   categoryId: string;
+  categoryIds?: string[];
   handle?: string;
   sku?: string;
+  variantId?: string;
   name: string;
   brand: string;
   description?: string;
@@ -22,6 +24,12 @@ export type LiveCatalogProduct = {
   priceRon: number;
   oldPriceRon?: number;
   stockLabel: string;
+  variants?: Array<{
+    id: string;
+    name: string;
+    priceRon: number;
+    inStock: boolean;
+  }>;
 };
 
 export type LiveCatalogCategory = {
@@ -38,6 +46,10 @@ export type LiveCatalogPayload = {
   productsCursor: string | null;
 };
 
+export type CatalogStampPayload = {
+  stamp: string;
+};
+
 type LoadCatalogOptions = {
   startAfterCursor?: string | null;
   pageSize?: number;
@@ -46,6 +58,15 @@ type LoadCatalogOptions = {
 };
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+const isLikelyLocalApiBaseUrl = (value: string) => {
+  try {
+    const parsed = new URL(value);
+    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+};
 
 const isRetriableError = (error: unknown) => {
   if (!(error instanceof Error)) return false;
@@ -77,11 +98,106 @@ const fetchWithRetry = async (requestFactory: () => Promise<Response>): Promise<
   }
 };
 
+const normalizeCategory = (value: unknown, index: number): LiveCatalogCategory | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Partial<LiveCatalogCategory>;
+  const id = typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
+  if (!id) return null;
+
+  const name = typeof candidate.name === 'string' && candidate.name.trim().length > 0 ? candidate.name.trim() : `Categorie ${index + 1}`;
+  const description = typeof candidate.description === 'string' ? candidate.description : '';
+  const imageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0 ? candidate.imageUrl : undefined;
+
+  return {
+    id,
+    name,
+    description,
+    ...(imageUrl ? { imageUrl } : {}),
+  };
+};
+
+const normalizeProduct = (value: unknown, fallbackCategoryId: string): LiveCatalogProduct | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as Partial<LiveCatalogProduct>;
+  const id = typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
+  if (!id) return null;
+
+  const categoryId =
+    typeof candidate.categoryId === 'string' && candidate.categoryId.trim().length > 0
+      ? candidate.categoryId.trim()
+      : fallbackCategoryId;
+  const name = typeof candidate.name === 'string' && candidate.name.trim().length > 0 ? candidate.name.trim() : 'Produs';
+  const brand = typeof candidate.brand === 'string' && candidate.brand.trim().length > 0 ? candidate.brand.trim() : 'Dacus';
+  const stockLabel =
+    typeof candidate.stockLabel === 'string' && candidate.stockLabel.trim().length > 0 ? candidate.stockLabel.trim() : 'În stoc';
+  const priceRon =
+    typeof candidate.priceRon === 'number' && Number.isFinite(candidate.priceRon) ? Number(candidate.priceRon) : 0;
+
+  const imageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0 ? candidate.imageUrl : undefined;
+  const thumbnailUrl =
+    typeof candidate.thumbnailUrl === 'string' && candidate.thumbnailUrl.length > 0 ? candidate.thumbnailUrl : undefined;
+  const description = typeof candidate.description === 'string' ? candidate.description : undefined;
+  const oldPriceRon =
+    typeof candidate.oldPriceRon === 'number' && Number.isFinite(candidate.oldPriceRon) ? Number(candidate.oldPriceRon) : undefined;
+  const handle = typeof candidate.handle === 'string' && candidate.handle.length > 0 ? candidate.handle : undefined;
+  const sku = typeof candidate.sku === 'string' && candidate.sku.length > 0 ? candidate.sku : undefined;
+  const variantId = typeof candidate.variantId === 'string' && candidate.variantId.length > 0 ? candidate.variantId : undefined;
+  const categoryIds = Array.isArray(candidate.categoryIds)
+    ? candidate.categoryIds.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : undefined;
+  const variants = Array.isArray(candidate.variants)
+    ? candidate.variants
+        .map((variant) => {
+          if (!variant || typeof variant !== 'object') return null;
+          const item = variant as { id?: unknown; name?: unknown; priceRon?: unknown; inStock?: unknown };
+          if (typeof item.id !== 'string' || item.id.length === 0) return null;
+          if (typeof item.name !== 'string' || item.name.length === 0) return null;
+          if (typeof item.priceRon !== 'number' || !Number.isFinite(item.priceRon)) return null;
+          return {
+            id: item.id,
+            name: item.name,
+            priceRon: item.priceRon,
+            inStock: Boolean(item.inStock),
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => !!item)
+    : undefined;
+
+  return {
+    id,
+    categoryId,
+    name,
+    brand,
+    stockLabel,
+    priceRon,
+    ...(description ? { description } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(typeof oldPriceRon === 'number' ? { oldPriceRon } : {}),
+    ...(handle ? { handle } : {}),
+    ...(sku ? { sku } : {}),
+    ...(variantId ? { variantId } : {}),
+    ...(categoryIds && categoryIds.length > 0 ? { categoryIds } : {}),
+    ...(variants && variants.length > 0 ? { variants } : {}),
+  };
+};
+
 const normalizePayload = (payload: CatalogApiPayload): LiveCatalogPayload => ({
-  categories: Array.isArray(payload.categories) ? payload.categories : [],
-  products: Array.isArray(payload.products)
-    ? Array.from(new Map(payload.products.map((product) => [product.id, product])).values())
-    : [],
+  categories: (Array.isArray(payload.categories) ? payload.categories : [])
+    .map((item, index) => normalizeCategory(item, index))
+    .filter((item): item is LiveCatalogCategory => !!item),
+  products: (() => {
+    const normalizedCategories = (Array.isArray(payload.categories) ? payload.categories : [])
+      .map((item, index) => normalizeCategory(item, index))
+      .filter((item): item is LiveCatalogCategory => !!item);
+    const fallbackCategoryId = normalizedCategories[0]?.id ?? 'uncategorized';
+    const normalizedProducts = (Array.isArray(payload.products) ? payload.products : [])
+      .map((item) => normalizeProduct(item, fallbackCategoryId))
+      .filter((item): item is LiveCatalogProduct => !!item);
+    return Array.from(new Map(normalizedProducts.map((product) => [product.id, product])).values());
+  })(),
   hasMoreProducts: !!payload.hasMoreProducts,
   productsCursor: payload.productsCursor ?? null,
 });
@@ -139,6 +255,44 @@ export const loadLiveCatalog = async (options?: LoadCatalogOptions): Promise<Liv
     startAfterCursor: options?.startAfterCursor,
     leanQuery: options?.leanQuery ?? true,
   });
+};
+
+export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> => {
+  if (isLikelyLocalApiBaseUrl(mobileEnv.apiBaseUrl)) return null;
+
+  const baseUrl = mobileEnv.apiBaseUrl.endsWith('/') ? mobileEnv.apiBaseUrl : `${mobileEnv.apiBaseUrl}/`;
+  const url = new URL('catalog/stamp', baseUrl);
+
+  try {
+    const response = await fetchWithRetry(() =>
+      (async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), Math.max(3500, Math.trunc(mobileEnv.storefrontTimeoutMs * 0.6)));
+
+        try {
+          const requestResponse = await fetch(url.toString(), {
+            method: 'GET',
+            signal: controller.signal,
+          });
+
+          if (!requestResponse.ok) {
+            throw new Error(`Catalog stamp request failed with status ${requestResponse.status}`);
+          }
+
+          return requestResponse;
+        } finally {
+          clearTimeout(timeout);
+        }
+      })(),
+    );
+
+    const payload = (await response.json()) as { stamp?: string };
+    if (typeof payload.stamp !== 'string' || payload.stamp.length === 0) return null;
+
+    return { stamp: payload.stamp };
+  } catch {
+    return null;
+  }
 };
 
 export const loadLiveCatalogProductsAfterCursor = async (

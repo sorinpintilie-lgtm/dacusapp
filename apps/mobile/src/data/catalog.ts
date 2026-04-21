@@ -8,8 +8,10 @@ export type CatalogCategory = {
 export type CatalogProduct = {
   id: string;
   categoryId: string;
+  categoryIds?: string[];
   handle?: string;
   sku?: string;
+  variantId?: string;
   name: string;
   brand: string;
   description?: string;
@@ -18,11 +20,11 @@ export type CatalogProduct = {
   priceRon: number;
   oldPriceRon?: number;
   stockLabel: string;
-};
-
-export const loyaltySummary = {
-  points: 1240,
-  tier: 'Silver',
-  nextTierSpendRon: 260,
+  variants?: Array<{
+    id: string;
+    name: string;
+    priceRon: number;
+    inStock: boolean;
+  }>;
 };
 

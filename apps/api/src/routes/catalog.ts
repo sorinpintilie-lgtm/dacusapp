@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { CatalogStore } from '../services/catalogStore.js';
 
 type CatalogRoutesOptions = {
   catalogEnv: {
@@ -6,6 +7,7 @@ type CatalogRoutesOptions = {
     storefrontToken: string;
     cacheTtlMs: number;
   };
+  catalogStore: CatalogStore;
 };
 
 type GraphQLError = {
@@ -36,6 +38,7 @@ type StorefrontProductNode = {
   title: string;
   handle: string;
   vendor: string;
+  productType?: string;
   description: string;
   availableForSale: boolean;
   featuredImage?: {
@@ -52,6 +55,8 @@ type StorefrontProductNode = {
   variants: {
     edges: Array<{
       node: {
+        id: string;
+        title: string;
         sku?: string | null;
         availableForSale: boolean;
         price: { amount: string; currencyCode: string };
@@ -75,6 +80,17 @@ type CatalogProductsResult = {
   };
 };
 
+type CatalogProductsStampResult = {
+  products: {
+    edges: Array<{
+      node: {
+        id: string;
+        updatedAt: string;
+      };
+    }>;
+  };
+};
+
 type CatalogCategory = {
   id: string;
   name: string;
@@ -85,8 +101,10 @@ type CatalogCategory = {
 type CatalogProduct = {
   id: string;
   categoryId: string;
+  categoryIds?: string[];
   handle?: string;
   sku?: string;
+  variantId?: string;
   name: string;
   brand: string;
   description?: string;
@@ -95,6 +113,12 @@ type CatalogProduct = {
   priceRon: number;
   oldPriceRon?: number;
   stockLabel: string;
+  variants?: Array<{
+    id: string;
+    name: string;
+    priceRon: number;
+    inStock: boolean;
+  }>;
 };
 
 type CatalogApiPayload = {
@@ -106,9 +130,10 @@ type CatalogApiPayload = {
   generatedAt: string;
 };
 
-type CachedValue = {
-  expiresAt: number;
-  payload: CatalogApiPayload;
+type CatalogStampApiPayload = {
+  stamp: string;
+  source: 'live' | 'cache';
+  generatedAt: string;
 };
 
 const CATALOG_COLLECTIONS_QUERY = `
@@ -145,6 +170,7 @@ const CATALOG_PRODUCTS_QUERY = `
           title
           handle
           vendor
+          productType
           description
           availableForSale
           featuredImage {
@@ -161,6 +187,8 @@ const CATALOG_PRODUCTS_QUERY = `
           variants(first: 1) {
             edges {
               node {
+                id
+                title
                 sku
                 availableForSale
                 price {
@@ -180,48 +208,13 @@ const CATALOG_PRODUCTS_QUERY = `
   }
 `;
 
-const CATALOG_PRODUCTS_LEAN_QUERY = `
-  query DacusCatalogProductsLean($first: Int!, $after: String) {
-    products(first: $first, after: $after, sortKey: ID) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
+const CATALOG_PRODUCTS_STAMP_QUERY = `
+  query DacusCatalogProductsStamp($first: Int!) {
+    products(first: $first, sortKey: UPDATED_AT, reverse: true) {
       edges {
         node {
           id
-          title
-          handle
-          vendor
-          description(truncateAt: 120)
-          availableForSale
-          featuredImage {
-            thumbnailUrl: url(transform: { maxWidth: 320, maxHeight: 320, crop: CENTER })
-            imageUrl: url(transform: { maxWidth: 720, maxHeight: 720, crop: CENTER })
-          }
-          collections(first: 5) {
-            edges {
-              node {
-                id
-              }
-            }
-          }
-          variants(first: 1) {
-            edges {
-              node {
-                sku
-                availableForSale
-                price {
-                  amount
-                  currencyCode
-                }
-                compareAtPrice {
-                  amount
-                  currencyCode
-                }
-              }
-            }
-          }
+          updatedAt
         }
       }
     }
@@ -230,12 +223,28 @@ const CATALOG_PRODUCTS_LEAN_QUERY = `
 
 const PAGE_SIZE_MAX = 250;
 const PAGE_SIZE_DEFAULT = 60;
-const collectionsCache = new Map<string, CachedValue>();
+
+type CachedValue = {
+  expiresAt: number;
+  payload: CatalogApiPayload;
+};
+
 const pageCache = new Map<string, CachedValue>();
+
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 const nowIso = () => new Date().toISOString();
 
-const getCachedPayload = (store: Map<string, CachedValue>, key: string): CatalogApiPayload | null => {
+const getCachedPayload = (
+  store: Map<string, CachedValue>,
+  key: string,
+): CatalogApiPayload | null => {
   const cached = store.get(key);
   if (!cached) return null;
   if (cached.expiresAt <= Date.now()) {
@@ -249,7 +258,12 @@ const getCachedPayload = (store: Map<string, CachedValue>, key: string): Catalog
   };
 };
 
-const setCachedPayload = (store: Map<string, CachedValue>, key: string, ttlMs: number, payload: CatalogApiPayload) => {
+const setCachedPayload = (
+  store: Map<string, CachedValue>,
+  key: string,
+  ttlMs: number,
+  payload: CatalogApiPayload,
+) => {
   store.set(key, {
     expiresAt: Date.now() + ttlMs,
     payload,
@@ -288,26 +302,27 @@ const queryStorefront = async <T>(
   return payload.data;
 };
 
-const loadAllCollections = async (env: CatalogRoutesOptions['catalogEnv']): Promise<CatalogCategory[]> => {
+const loadAllCollections = async (
+  env: CatalogRoutesOptions['catalogEnv'],
+): Promise<CatalogCategory[]> => {
   const categories: CatalogCategory[] = [];
   let cursor: string | null = null;
 
   while (true) {
-    const collectionPage: CatalogCollectionsResult = await queryStorefront<CatalogCollectionsResult>(
-      env,
-      CATALOG_COLLECTIONS_QUERY,
-      {
+    const collectionPage: CatalogCollectionsResult =
+      await queryStorefront<CatalogCollectionsResult>(env, CATALOG_COLLECTIONS_QUERY, {
         first: PAGE_SIZE_MAX,
         after: cursor,
-      },
-    );
+      });
 
-    const mapped = collectionPage.collections.edges.map(({ node }: { node: StorefrontCollectionNode }) => ({
-      id: node.id,
-      name: node.title,
-      description: node.description || 'Categorie produse Dacus',
-      ...(node.image?.url ? { imageUrl: node.image.url } : {}),
-    }));
+    const mapped = collectionPage.collections.edges.map(
+      ({ node }: { node: StorefrontCollectionNode }) => ({
+        id: node.id,
+        name: node.title,
+        description: node.description || 'Categorie produse Dacus',
+        ...(node.image?.url ? { imageUrl: node.image.url } : {}),
+      }),
+    );
 
     categories.push(...mapped);
 
@@ -319,25 +334,105 @@ const loadAllCollections = async (env: CatalogRoutesOptions['catalogEnv']): Prom
   return categories;
 };
 
-const mapProduct = (product: StorefrontProductNode, categoryIds: Set<string>, defaultCategoryId: string): CatalogProduct => {
+const loadAllProducts = async (
+  env: CatalogRoutesOptions['catalogEnv'],
+  categories: CatalogCategory[],
+): Promise<CatalogProduct[]> => {
+  const categoryIds = new Set(categories.map((c) => c.id));
+  const products: CatalogProduct[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    const productsPage: CatalogProductsResult = await queryStorefront<CatalogProductsResult>(
+      env,
+      CATALOG_PRODUCTS_QUERY,
+      {
+        first: PAGE_SIZE_MAX,
+        after: cursor,
+      },
+    );
+
+    const mapped = productsPage.products.edges.map(({ node }) => {
+      const collectionIds = Array.from(
+        new Set(
+          node.collections.edges
+            .map((edge) => edge.node.id)
+            .filter((value) => typeof value === 'string' && value.length > 0),
+        ).values(),
+      );
+      const matchedCollectionIds = collectionIds.filter((collectionId) =>
+        categoryIds.has(collectionId),
+      );
+      let resolvedCategoryId = matchedCollectionIds[0] ?? null;
+      let resolvedCategoryIds = matchedCollectionIds;
+
+      if (!resolvedCategoryId) {
+        const productType = node.productType?.trim();
+        if (productType) {
+          const typeCategoryId = `product-type-${toSlug(productType) || 'diverse'}`;
+          resolvedCategoryId = typeCategoryId;
+          resolvedCategoryIds = [typeCategoryId];
+        }
+      }
+
+      if (!resolvedCategoryId) {
+        resolvedCategoryIds = ['uncategorized'];
+      }
+
+      return mapProduct(node, resolvedCategoryId ?? 'uncategorized', resolvedCategoryIds);
+    });
+
+    products.push(...mapped);
+
+    const pageInfo: ConnectionPageInfo = productsPage.products.pageInfo;
+    if (!pageInfo.hasNextPage || !pageInfo.endCursor) break;
+    cursor = pageInfo.endCursor;
+  }
+
+  return products;
+};
+
+const getLatestStamp = async (
+  env: CatalogRoutesOptions['catalogEnv'],
+): Promise<{ stamp: string; generatedAt: string }> => {
+  const stampData = await queryStorefront<CatalogProductsStampResult>(
+    env,
+    CATALOG_PRODUCTS_STAMP_QUERY,
+    {
+      first: 1,
+    },
+  );
+
+  const latest = stampData.products.edges[0]?.node;
+  const stamp = latest?.id && latest.updatedAt ? `${latest.id}:${latest.updatedAt}` : 'empty';
+  const generatedAt = nowIso();
+  return { stamp, generatedAt };
+};
+
+const mapProduct = (
+  product: StorefrontProductNode,
+  resolvedCategoryId: string,
+  resolvedCategoryIds: string[],
+): CatalogProduct => {
   const firstVariant = product.variants.edges[0]?.node;
   const priceRon = Number(firstVariant?.price.amount ?? 0);
   const oldPrice = firstVariant?.compareAtPrice?.amount;
   const oldPriceRon = oldPrice ? Number(oldPrice) : undefined;
   const inStock = firstVariant?.availableForSale ?? product.availableForSale;
 
-  const collectionIds = product.collections.edges.map((edge) => edge.node.id);
-  const resolvedCategoryId = collectionIds.find((collectionId) => categoryIds.has(collectionId)) ?? defaultCategoryId;
-
   return {
     id: product.id,
     categoryId: resolvedCategoryId,
+    ...(resolvedCategoryIds.length > 0 ? { categoryIds: resolvedCategoryIds } : {}),
     ...(product.handle ? { handle: product.handle } : {}),
     ...(firstVariant?.sku ? { sku: firstVariant.sku } : {}),
+    ...(firstVariant?.id ? { variantId: firstVariant.id } : {}),
     name: product.title,
     brand: product.vendor || 'Dacus',
     ...(product.description ? { description: product.description } : {}),
-    ...(product.featuredImage?.thumbnailUrl ? { thumbnailUrl: product.featuredImage.thumbnailUrl } : {}),
+    ...(product.featuredImage?.thumbnailUrl
+      ? { thumbnailUrl: product.featuredImage.thumbnailUrl }
+      : {}),
     ...(product.featuredImage?.imageUrl
       ? { imageUrl: product.featuredImage.imageUrl }
       : product.featuredImage?.thumbnailUrl
@@ -346,10 +441,147 @@ const mapProduct = (product: StorefrontProductNode, categoryIds: Set<string>, de
     priceRon,
     ...(typeof oldPriceRon === 'number' ? { oldPriceRon } : {}),
     stockLabel: inStock ? 'În stoc' : 'Indisponibil',
+    ...(firstVariant?.id
+      ? {
+          variants: [
+            {
+              id: firstVariant.id,
+              name: firstVariant.title || 'Varianta standard',
+              priceRon,
+              inStock,
+            },
+          ],
+        }
+      : {}),
   };
 };
 
 export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fastify, options) => {
+  let stampCache: { expiresAt: number; payload: CatalogStampApiPayload } | null = null;
+  let incrementalSyncInFlight: Promise<
+    | { synced: true; categories: number; products: number; stamp: string }
+    | { synced: false; reason: 'no_changes'; stamp: string }
+  > | null = null;
+
+  const setStampCache = (payload: CatalogStampApiPayload) => {
+    stampCache = {
+      expiresAt: Date.now() + Math.min(options.catalogEnv.cacheTtlMs, 30_000),
+      payload,
+    };
+  };
+
+  const runFullSync = async () => {
+    const categories = await loadAllCollections(options.catalogEnv);
+    const products = await loadAllProducts(options.catalogEnv, categories);
+    const stamp = await getLatestStamp(options.catalogEnv);
+
+    await Promise.all([
+      options.catalogStore.setCategories(categories),
+      options.catalogStore.setProducts(products),
+      options.catalogStore.setStamp(stamp),
+    ]);
+
+    pageCache.clear();
+    setStampCache({
+      stamp: stamp.stamp,
+      source: 'live',
+      generatedAt: stamp.generatedAt,
+    });
+
+    return { categories: categories.length, products: products.length, stamp: stamp.stamp };
+  };
+
+  const runIncrementalSync = async () => {
+    const storedStamp = await options.catalogStore.getStamp();
+    const latestStamp = await getLatestStamp(options.catalogEnv);
+
+    if (storedStamp && storedStamp.stamp === latestStamp.stamp) {
+      setStampCache({
+        stamp: latestStamp.stamp,
+        source: 'cache',
+        generatedAt: latestStamp.generatedAt,
+      });
+      return { synced: false as const, reason: 'no_changes' as const, stamp: latestStamp.stamp };
+    }
+
+    const categories = await loadAllCollections(options.catalogEnv);
+    const products = await loadAllProducts(options.catalogEnv, categories);
+    await Promise.all([
+      options.catalogStore.setCategories(categories),
+      options.catalogStore.setProducts(products),
+      options.catalogStore.setStamp(latestStamp),
+    ]);
+
+    pageCache.clear();
+    setStampCache({
+      stamp: latestStamp.stamp,
+      source: 'live',
+      generatedAt: latestStamp.generatedAt,
+    });
+
+    return {
+      synced: true as const,
+      categories: categories.length,
+      products: products.length,
+      stamp: latestStamp.stamp,
+    };
+  };
+
+  const ensureIncrementalSync = () => {
+    if (!incrementalSyncInFlight) {
+      incrementalSyncInFlight = runIncrementalSync().finally(() => {
+        incrementalSyncInFlight = null;
+      });
+    }
+    return incrementalSyncInFlight;
+  };
+
+  fastify.get('/catalog/stamp', async (_request, reply) => {
+    if (stampCache && stampCache.expiresAt > Date.now()) {
+      reply.header('Cache-Control', 'private, max-age=15');
+      return {
+        ...stampCache.payload,
+        source: 'cache',
+      } satisfies CatalogStampApiPayload;
+    }
+
+    try {
+      const stampData = await queryStorefront<CatalogProductsStampResult>(
+        options.catalogEnv,
+        CATALOG_PRODUCTS_STAMP_QUERY,
+        {
+          first: 1,
+        },
+      );
+
+      const latest = stampData.products.edges[0]?.node;
+      const payload: CatalogStampApiPayload = {
+        stamp: latest?.id && latest.updatedAt ? `${latest.id}:${latest.updatedAt}` : 'empty',
+        source: 'live',
+        generatedAt: nowIso(),
+      };
+
+      setStampCache(payload);
+      reply.header('Cache-Control', 'private, max-age=15');
+      return payload;
+    } catch {
+      const fallback = await options.catalogStore.getStamp();
+      if (fallback) {
+        const payload: CatalogStampApiPayload = {
+          stamp: fallback.stamp,
+          source: 'cache',
+          generatedAt: fallback.generatedAt,
+        };
+        setStampCache(payload);
+        reply.header('Cache-Control', 'private, max-age=15');
+        return payload;
+      }
+
+      reply.code(503);
+      return { error: 'Catalog stamp is unavailable.' };
+    }
+  });
+
   fastify.get('/catalog', async (request, reply) => {
     const query = request.query as {
       after?: string;
@@ -370,76 +602,109 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fa
     const directCachedPage = getCachedPayload(pageCache, pageCacheKey);
     if (directCachedPage) return directCachedPage;
 
-    let categories: CatalogCategory[] = [];
-    if (includeCategories) {
-      const categoriesCacheKey = 'collections:all';
-      const cachedCollections = getCachedPayload(collectionsCache, categoriesCacheKey);
-      if (cachedCollections) {
-        categories = cachedCollections.categories;
+    // Check store for categories and products
+    const [storedCategories, storedProducts, storedStamp] = await Promise.all([
+      options.catalogStore.getCategories(),
+      options.catalogStore.getProducts(),
+      options.catalogStore.getStamp(),
+    ]);
+
+    const now = Date.now();
+    const stampAge =
+      storedStamp && Number.isFinite(Date.parse(storedStamp.generatedAt))
+        ? now - Date.parse(storedStamp.generatedAt)
+        : Infinity;
+    const hasStoredData = storedCategories.length > 0 && storedProducts.length > 0;
+    const hasFreshData = hasStoredData && stampAge < options.catalogEnv.cacheTtlMs;
+
+    let categoriesForMapping = storedCategories;
+    let allProducts = storedProducts;
+    let responseSource: CatalogApiPayload['source'] = hasStoredData ? 'cache' : 'live';
+
+    if (hasFreshData) {
+      responseSource = 'cache';
+    } else {
+      if (hasStoredData) {
+        responseSource = 'cache';
+        void ensureIncrementalSync().catch((error) => {
+          request.log.warn({ err: error }, 'Background incremental catalog sync failed');
+        });
+      } else {
+        try {
+          await ensureIncrementalSync();
+          [categoriesForMapping, allProducts] = await Promise.all([
+            options.catalogStore.getCategories(),
+            options.catalogStore.getProducts(),
+          ]);
+          responseSource = 'live';
+        } catch (error) {
+          request.log.error({ err: error }, 'Initial catalog sync failed');
+          reply.code(503);
+          return {
+            error: 'Catalog is temporarily unavailable.',
+            errorRo: 'Catalogul este indisponibil momentan.',
+          };
+        }
       }
     }
 
-    const productsPromise = queryStorefront<CatalogProductsResult>(
-      options.catalogEnv,
-      lean ? CATALOG_PRODUCTS_LEAN_QUERY : CATALOG_PRODUCTS_QUERY,
-      {
-        first: pageSize,
-        after,
-      },
+    // Paginate products from stored - optimize memory usage
+    const startIndex = after ? allProducts.findIndex((p) => p.id === after) + 1 : 0;
+    const paginatedProducts = allProducts.slice(startIndex, startIndex + pageSize);
+    const hasMore = startIndex + pageSize < allProducts.length;
+    const endCursor = hasMore
+      ? (paginatedProducts[paginatedProducts.length - 1]?.id ?? null)
+      : null;
+
+    const categoryIds = new Set(categoriesForMapping.map((category) => category.id));
+    const hasUncategorizedProducts = paginatedProducts.some(
+      (product) => product.categoryId === 'uncategorized' || !categoryIds.has(product.categoryId),
     );
 
-    const categoriesPromise = includeCategories && categories.length === 0 ? loadAllCollections(options.catalogEnv) : null;
-
-    const [productsData, liveCategories] = await Promise.all([productsPromise, categoriesPromise]);
-
-    if (liveCategories && includeCategories) {
-      categories = liveCategories;
-
-      setCachedPayload(collectionsCache, 'collections:all', options.catalogEnv.cacheTtlMs, {
-        categories,
-        products: [],
-        hasMoreProducts: false,
-        productsCursor: null,
-        source: 'live',
-        generatedAt: nowIso(),
-      });
-    }
-
     const normalizedCategories = includeCategories
-      ? categories.length
-        ? [
-            ...categories,
-            {
+      ? (() => {
+          const base = categoriesForMapping.length > 0 ? [...categoriesForMapping] : [];
+
+          if (hasUncategorizedProducts && !base.some((item) => item.id === 'uncategorized')) {
+            base.push({
               id: 'uncategorized',
               name: 'Diverse',
               description: 'Produse fără categorie explicită în Shopify',
-            },
-          ]
-        : [
-            {
-              id: 'uncategorized',
-              name: 'Toate produsele',
-              description: 'Produse Dacus',
-            },
-          ]
-      : [];
+            });
+          }
 
-    const categoryIds = new Set(categories.map((category) => category.id));
-    const products = productsData.products.edges.map(({ node }) => mapProduct(node, categoryIds, 'uncategorized'));
+          return base;
+        })()
+      : [];
 
     const payload: CatalogApiPayload = {
       categories: normalizedCategories,
-      products,
-      hasMoreProducts: !!productsData.products.pageInfo.hasNextPage,
-      productsCursor: productsData.products.pageInfo.endCursor ?? null,
-      source: 'live',
+      products: paginatedProducts,
+      hasMoreProducts: hasMore,
+      productsCursor: endCursor,
+      source: responseSource,
       generatedAt: nowIso(),
     };
 
+    // Cache the page
     setCachedPayload(pageCache, pageCacheKey, options.catalogEnv.cacheTtlMs, payload);
 
     reply.header('Cache-Control', 'private, max-age=30');
     return payload;
   });
-};
 
+  fastify.post('/catalog/sync', async () => {
+    return runFullSync();
+  });
+
+  fastify.post('/catalog/sync-incremental', async () => {
+    return ensureIncrementalSync();
+  });
+
+  fastify.post('/catalog/webhooks/products', async () => {
+    // Webhook for product changes
+    // For simplicity, trigger sync or update specific product
+    // But for now, just acknowledge
+    return { ok: true };
+  });
+};
