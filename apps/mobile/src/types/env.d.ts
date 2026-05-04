@@ -2,6 +2,8 @@ declare namespace NodeJS {
   interface ProcessEnv {
     EXPO_PUBLIC_API_BASE_URL?: string;
     EXPO_PUBLIC_API_BASE_URL_DEVICE?: string;
+    EXPO_PUBLIC_STORE_DOMAIN?: string;
+    EXPO_PUBLIC_PUBLIC_TOKEN?: string;
     EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN?: string;
     EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN?: string;
     EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID?: string;

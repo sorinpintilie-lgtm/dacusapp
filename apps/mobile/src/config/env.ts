@@ -6,6 +6,8 @@ const schema = z.object({
     .url()
     .default('https://us-central1-dacus-b40f9.cloudfunctions.net/api'),
   EXPO_PUBLIC_API_BASE_URL_DEVICE: z.string().url().optional(),
+  EXPO_PUBLIC_STORE_DOMAIN: z.string().optional(),
+  EXPO_PUBLIC_PUBLIC_TOKEN: z.string().optional(),
   EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: z.string().default('f4eb2c-ae.myshopify.com'),
   EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN: z.string().default(''),
   EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID: z.string().default('not-configured'),
@@ -45,6 +47,8 @@ const data = parsed.success
   : {
       EXPO_PUBLIC_API_BASE_URL: 'https://us-central1-dacus-b40f9.cloudfunctions.net/api',
       EXPO_PUBLIC_API_BASE_URL_DEVICE: undefined,
+      EXPO_PUBLIC_STORE_DOMAIN: undefined,
+      EXPO_PUBLIC_PUBLIC_TOKEN: undefined,
       EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: 'f4eb2c-ae.myshopify.com',
       EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN: '',
       EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID: 'not-configured',
@@ -59,8 +63,9 @@ const data = parsed.success
 export const mobileEnv = {
   apiBaseUrl: data.EXPO_PUBLIC_API_BASE_URL,
   apiBaseUrlDevice: data.EXPO_PUBLIC_API_BASE_URL_DEVICE,
-  shopifyStoreDomain: data.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN,
-  storefrontPublicToken: data.EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN,
+  shopifyStoreDomain: data.EXPO_PUBLIC_STORE_DOMAIN || data.EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN,
+  storefrontPublicToken:
+    data.EXPO_PUBLIC_PUBLIC_TOKEN || data.EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN,
   authClientId: data.EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID,
   authAuthorizeUrl: data.EXPO_PUBLIC_SHOPIFY_AUTH_AUTHORIZE_URL,
   authTokenUrl: data.EXPO_PUBLIC_SHOPIFY_AUTH_TOKEN_URL,

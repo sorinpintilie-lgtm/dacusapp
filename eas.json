@@ -14,10 +14,10 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://europe-west1-dacus-b40f9.cloudfunctions.net/api",
-        "EXPO_PUBLIC_API_BASE_URL_DEVICE": "https://europe-west1-dacus-b40f9.cloudfunctions.net/api",
-        "EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN": "f4eb2c-ae.myshopify.com",
-        "EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN": "439a0bd1b198b0a2a0129b6a4efa52aa",
+        "EXPO_PUBLIC_API_BASE_URL": "https://us-central1-dacus-b40f9.cloudfunctions.net/api",
+        "EXPO_PUBLIC_API_BASE_URL_DEVICE": "https://us-central1-dacus-b40f9.cloudfunctions.net/api",
+        "EXPO_PUBLIC_STORE_DOMAIN": "f4eb2c-ae.myshopify.com",
+        "EXPO_PUBLIC_PUBLIC_TOKEN": "439a0bd1b198b0a2a0129b6a4efa52aa",
         "EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID": "4f59096c-c6cf-4b96-9272-1419a6eeff83",
         "EXPO_PUBLIC_SHOPIFY_AUTH_AUTHORIZE_URL": "https://client.dacus.ro/authentication/oauth/authorize",
         "EXPO_PUBLIC_SHOPIFY_AUTH_TOKEN_URL": "https://client.dacus.ro/authentication/oauth/token",
