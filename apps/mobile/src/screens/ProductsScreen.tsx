@@ -503,7 +503,7 @@ export const ProductsScreen = ({
           productsHasMoreForView ? (
             <TouchableOpacity style={styles.loadMoreButton} onPress={onLoadMoreProducts}>
               <Text style={styles.loadMoreButtonText}>
-                {productsLoadingMore ? 'Se încarcă...' : 'Afișează mai multe produse'}
+                {productsLoadingMore ? 'Se încarcă...' : 'Afișează mai multe'}
               </Text>
             </TouchableOpacity>
           ) : (

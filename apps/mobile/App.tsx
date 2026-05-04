@@ -606,10 +606,17 @@ function AppContent() {
     [localCollectionFilteredResults, searchResults, shouldUseLocalCollectionFallback],
   );
 
+  const productsVisibleSource = useMemo(() => {
+    if (!shouldUseLocalCollectionFallback) return searchResults;
+    return localCollectionFilteredResults.slice(0, productsPage * PRODUCTS_PAGE_SIZE);
+  }, [localCollectionFilteredResults, productsPage, searchResults, shouldUseLocalCollectionFallback]);
+
   const productsTotalForView = shouldUseLocalCollectionFallback
     ? localCollectionFilteredResults.length
     : productsTotal;
-  const productsHasMoreForView = shouldUseLocalCollectionFallback ? false : productsHasMore;
+  const productsHasMoreForView = shouldUseLocalCollectionFallback
+    ? localCollectionFilteredResults.length > productsVisibleSource.length
+    : productsHasMore;
 
   const availableBrands = useMemo(
     () =>
@@ -689,9 +696,9 @@ function AppContent() {
 
   const filteredProducts = useMemo(() => {
     if (page !== 'products') return [];
-    if (!onlyFavorites) return productsResultsSource;
-    return productsResultsSource.filter((product) => wishlist.has(product.id));
-  }, [onlyFavorites, page, productsResultsSource, wishlist]);
+    if (!onlyFavorites) return productsVisibleSource;
+    return productsVisibleSource.filter((product) => wishlist.has(product.id));
+  }, [onlyFavorites, page, productsVisibleSource, wishlist]);
 
   const cartItems = useMemo(
     () =>
@@ -3273,6 +3280,11 @@ function AppContent() {
     setProductsLoadingMore(true);
 
     try {
+      if (shouldUseLocalCollectionFallback) {
+        setProductsPage(nextPage);
+        return;
+      }
+
       const scopedProducts =
         searchQuery.trim().length === 0
           ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
