@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
 import { bundledCatalogBootstrap } from '../data/catalogBootstrap';
+import categoryCountsRaw from '../data/catalogCategoryCounts.json';
 import { loadBundledCategoryProducts } from '../data/catalogChunkIndex';
 import type { LiveCatalogPayload } from '../services/storefront';
 import { buildProductIndexes } from '../utils/catalogFilters';
 
 const BUNDLED_CATEGORIES = bundledCatalogBootstrap.categories ?? [];
 const BUNDLED_PRODUCTS = bundledCatalogBootstrap.products ?? [];
+const CATEGORY_COUNTS = new Map<string, number>(Object.entries(categoryCountsRaw as Record<string, number>));
 
 type CatalogState = {
   categories: CatalogCategory[];
@@ -116,10 +118,8 @@ export const useCatalog = (): CatalogState => {
     [products, selectedProductId],
   );
 
-  const { productsById, countByCategory } = useMemo(
-    () => buildProductIndexes(products),
-    [products],
-  );
+  const { productsById } = useMemo(() => buildProductIndexes(products), [products]);
+  const countByCategory = CATEGORY_COUNTS;
 
   return {
     categories,

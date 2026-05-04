@@ -41,9 +41,10 @@ export const CategoriesScreen = ({
 
   return (
     <FlatList
+      style={styles.pageContainer}
       data={categories}
       keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.stackLarge}
+      contentContainerStyle={[styles.stackLarge, { paddingBottom: 120 }]}
       initialNumToRender={10}
       maxToRenderPerBatch={8}
       windowSize={6}

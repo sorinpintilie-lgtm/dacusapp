@@ -4,6 +4,7 @@ import path from 'node:path';
 const SNAPSHOT_PATH = path.resolve('apps/mobile/src/data/catalogSnapshot.json');
 const OUTPUT_DIR = path.resolve('apps/mobile/src/data/catalogChunks');
 const BOOTSTRAP_PATH = path.resolve('apps/mobile/src/data/catalogBootstrap.json');
+const COUNTS_PATH = path.resolve('apps/mobile/src/data/catalogCategoryCounts.json');
 const INDEX_TS_PATH = path.resolve('apps/mobile/src/data/catalogChunkIndex.ts');
 const HOME_PRODUCTS_LIMIT = 180;
 
@@ -35,6 +36,9 @@ for (const product of products) {
 }
 
 const bootstrapProducts = products.slice(0, HOME_PRODUCTS_LIMIT);
+const categoryCounts = Object.fromEntries(
+  Array.from(categoryBuckets.entries()).map(([categoryId, bucket]) => [categoryId, bucket.length]),
+);
 const bootstrap = {
   source: 'bundled-bootstrap',
   stamp: snapshot.stamp ?? null,
@@ -45,6 +49,7 @@ const bootstrap = {
   productsCursor: null,
 };
 fs.writeFileSync(BOOTSTRAP_PATH, `${JSON.stringify(bootstrap)}\n`, 'utf8');
+fs.writeFileSync(COUNTS_PATH, `${JSON.stringify(categoryCounts)}\n`, 'utf8');
 
 const indexLines = [
   "import type { CatalogProduct } from './catalog';",
