@@ -1,0 +1,7 @@
+- generic [active] [ref=e1]:
+  - 'heading "Error: Forbidden" [level=1] [ref=e2]'
+  - heading "Your client does not have permission to get URL /getCatalog from this server." [level=2] [ref=e3]:
+    - text: Your client does not have permission to get URL
+    - code [ref=e4]: /getCatalog
+    - text: from this server.
+  - heading [level=2]

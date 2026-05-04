@@ -6,7 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-local-authentication",
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ],
+      "expo-background-fetch"
     ],
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -14,20 +22,46 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "googleServicesFile": "../../GoogleService-Info.plist",
-      "bundleIdentifier": "ro.dacus.mobile"
+      "bundleIdentifier": "ro.dacus.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Dacus folosește camera pentru a scana coduri QR și a verifica produsele.",
+        "NSPhotoLibraryUsageDescription": "Dacus folosește biblioteca foto pentru a salva imaginile produselor.",
+        "NSPhotoLibraryAddUsageDescription": "Dacus folosește biblioteca foto pentru a salva imaginile produselor.",
+        "NSLocationWhenInUseUsageDescription": "Dacus folosește locația pentru a găsi magazinele apropiate.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Dacus folosește locația pentru a trimite notificări despre oferte apropiate.",
+        "NSFaceIDUsageDescription": "Dacus folosește Face ID pentru autentificare rapidă și sigură.",
+        "UIBackgroundModes": ["remote-notification", "processing"],
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleTypeRole": "Editor",
+            "CFBundleURLSchemes": ["ro.dacus.mobile", "dacus"]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "ro.dacus.mobile"
+      "package": "ro.dacus.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.FOREGROUND_SERVICE"
+      ]
     },
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}"

@@ -5,9 +5,38 @@ import {
   setStoredSession,
   type StoredSession,
 } from './sessionStorage';
+import {
+  loginWithFirebase,
+  registerWithFirebase,
+  logoutFromFirebase,
+  getCurrentFirebaseUser,
+  getFirebaseIdToken,
+  onFirebaseAuthChange,
+  type FirebaseUser,
+} from './firebaseAuth';
+import { authenticateWithBiometric, isBiometricAvailable } from './biometric';
+import {
+  getCatalog as getCatalogFromFn,
+  getCart as getCartFromFn,
+  addToCart as addToCartToFn,
+  removeFromCart as removeFromCartFromFn,
+  getAddresses as getAddressesFromFn,
+  addAddress as addAddressToFn,
+  getOrders as getOrdersFromFn,
+} from './functionsClient';
 import type { CatalogProduct } from '../data/catalog';
 
-type User = StoredSession['user'];
+type User = {
+  id: string;
+  email: string;
+  name: string;
+  createdAt?: string;
+};
+
+const toStoredUser = (user: User): StoredSession['user'] => ({
+  ...user,
+  createdAt: user.createdAt || new Date().toISOString(),
+});
 
 export type CartLine = {
   productId: string;
@@ -377,9 +406,9 @@ export type ProductSearchPayload = {
   source?: string;
 };
 
-const asSession = (payload: { sessionToken: string; user: User }): StoredSession => ({
-  sessionToken: payload.sessionToken,
-  user: payload.user,
+const asSession = (payload: { idToken: string; user: User }): StoredSession => ({
+  sessionToken: payload.idToken,
+  user: toStoredUser(payload.user),
 });
 
 export const registerAccount = async (
@@ -387,40 +416,55 @@ export const registerAccount = async (
   password: string,
   name: string,
 ): Promise<User> => {
-  const payload = await apiRequest<{ sessionToken: string; user: User }>('/auth/register', {
-    method: 'POST',
-    body: { email, password, name },
-  });
-  await setStoredSession(asSession(payload));
-  return payload.user;
+  const { userId, email: e, idToken } = await registerWithFirebase(email, password, name);
+  const user: User = { id: userId, email: e, name, createdAt: new Date().toISOString() };
+  await setStoredSession(asSession({ idToken, user }));
+  return user;
 };
 
 export const loginAccount = async (email: string, password: string): Promise<User> => {
-  const payload = await apiRequest<{ sessionToken: string; user: User }>('/auth/login', {
-    method: 'POST',
-    body: { email, password },
-  });
-  await setStoredSession(asSession(payload));
-  return payload.user;
+  const { userId, email: e, idToken, name } = await loginWithFirebase(email, password);
+  const user: User = { id: userId, email: e, name, createdAt: new Date().toISOString() };
+  await setStoredSession(asSession({ idToken, user }));
+  return user;
 };
 
 export const logoutAccount = async (): Promise<void> => {
-  await apiRequest('/auth/logout', { method: 'POST', auth: true }).catch(() => undefined);
-  await clearStoredSession();
+  await logoutFromFirebase();
 };
 
 export const restoreAccount = async (): Promise<User | null> => {
-  const local = await getStoredSession();
-  if (!local) return null;
+  const firebaseUser = getCurrentFirebaseUser();
+  if (!firebaseUser) return null;
 
   try {
-    const payload = await apiRequest<{ user: User }>('/auth/session', { auth: true });
-    await setStoredSession({ ...local, user: payload.user });
-    return payload.user;
-  } catch {
-    await clearStoredSession();
+    const idToken = await firebaseUser.getIdToken(true);
+    const user: User = {
+      id: firebaseUser.uid,
+      email: firebaseUser.email || '',
+      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Client',
+    };
+    await setStoredSession(asSession({ idToken, user }));
+    return user;
+  } catch (error) {
+    console.log('[Auth] Firebase restore failed', error);
     return null;
   }
+};
+
+export const onAuthChange = (callback: (user: User | null) => void): (() => void) => {
+  return onFirebaseAuthChange((firebaseUser) => {
+    if (!firebaseUser) {
+      callback(null);
+      return;
+    }
+    const user: User = {
+      id: firebaseUser.uid,
+      email: firebaseUser.email || '',
+      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Client',
+    };
+    callback(user);
+  });
 };
 
 export const requestPasswordReset = async (email: string): Promise<void> => {
@@ -428,41 +472,58 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
 };
 
 export const fetchCart = async (): Promise<CartLine[]> => {
-  const payload = await apiRequest<{ lines: CartLine[] }>('/cart', { auth: true });
-  return payload.lines;
+  try {
+    return await getCartFromFn();
+  } catch {
+    const payload = await apiRequest<{ lines: CartLine[] }>('/cart', { auth: true });
+    return payload.lines;
+  }
 };
 
 export const upsertCartLine = async (line: CartLine): Promise<CartLine[]> => {
-  const payload = await apiRequest<{ lines: CartLine[] }>('/cart/lines', {
-    method: 'PUT',
-    auth: true,
-    body: line,
-  });
-  return payload.lines;
+  try {
+    return await addToCartToFn(line);
+  } catch {
+    const payload = await apiRequest<{ lines: CartLine[] }>('/cart/lines', {
+      method: 'PUT',
+      auth: true,
+      body: line,
+    });
+    return payload.lines;
+  }
 };
 
 export const replaceCartLines = async (lines: CartLine[]): Promise<CartLine[]> => {
-  const payload = await apiRequest<{ lines: CartLine[] }>('/cart/replace', {
-    method: 'PUT',
-    auth: true,
-    body: { lines },
-  });
-  return payload.lines;
+  try {
+    const { replaceCart } = await import('./functionsClient');
+    return await replaceCart({ lines });
+  } catch {
+    const payload = await apiRequest<{ lines: CartLine[] }>('/cart/replace', {
+      method: 'PUT',
+      auth: true,
+      body: { lines },
+    });
+    return payload.lines;
+  }
 };
 
 export const removeCartLine = async (
   productId: string,
   variantId?: string,
 ): Promise<CartLine[]> => {
-  const query = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
-  const payload = await apiRequest<{ lines: CartLine[] }>(
-    `/cart/lines/${encodeURIComponent(productId)}${query}`,
-    {
-      method: 'DELETE',
-      auth: true,
-    },
-  );
-  return payload.lines;
+  try {
+    return await removeFromCartFromFn(productId, variantId);
+  } catch {
+    const query = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
+    const payload = await apiRequest<{ lines: CartLine[] }>(
+      `/cart/lines/${encodeURIComponent(productId)}${query}`,
+      {
+        method: 'DELETE',
+        auth: true,
+      },
+    );
+    return payload.lines;
+  }
 };
 
 export const validateCart = async (): Promise<CartValidationResult> => {
@@ -474,6 +535,7 @@ export const validateCart = async (): Promise<CartValidationResult> => {
 
 export const checkoutCart = async (input?: {
   addressId?: string;
+  address?: AddressDraft;
 }): Promise<{
   orderId: string;
   checkoutUrl: string;
@@ -488,6 +550,7 @@ export const checkoutCart = async (input?: {
     body: {
       currency: 'RON',
       ...(input?.addressId ? { addressId: input.addressId } : {}),
+      ...(input?.address ? { address: input.address } : {}),
     },
   });
 };
@@ -547,17 +610,34 @@ export const fetchOrderDetails = async (orderId: string): Promise<OrderDetailsPa
 };
 
 export const fetchAddresses = async (): Promise<AddressesPayload> => {
-  return apiRequest<AddressesPayload>('/account/addresses', { auth: true });
+  try {
+    const result = await getAddressesFromFn();
+    return {
+      addresses: result.addresses,
+      selectedAddressId: result.selectedAddressId,
+    };
+  } catch {
+    return apiRequest<AddressesPayload>('/account/addresses', { auth: true });
+  }
 };
 
 export const createAddress = async (
   draft: AddressDraft,
 ): Promise<{ address: Address } & AddressesPayload> => {
-  return apiRequest<{ address: Address } & AddressesPayload>('/account/addresses', {
-    method: 'POST',
-    auth: true,
-    body: draft,
-  });
+  try {
+    const result = await addAddressToFn(draft);
+    return {
+      address: result.address,
+      addresses: [result.address],
+      selectedAddressId: result.address.id,
+    };
+  } catch {
+    return apiRequest<{ address: Address } & AddressesPayload>('/account/addresses', {
+      method: 'POST',
+      auth: true,
+      body: draft,
+    });
+  }
 };
 
 export const updateAddress = async (

@@ -1,4 +1,5 @@
 import { mobileEnv } from '../config/env';
+import { getCatalog as getCatalogFromFn } from './functionsClient';
 
 type CatalogApiPayload = {
   categories: LiveCatalogCategory[];
@@ -102,12 +103,19 @@ const normalizeCategory = (value: unknown, index: number): LiveCatalogCategory |
   if (!value || typeof value !== 'object') return null;
 
   const candidate = value as Partial<LiveCatalogCategory>;
-  const id = typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
+  const id =
+    typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
   if (!id) return null;
 
-  const name = typeof candidate.name === 'string' && candidate.name.trim().length > 0 ? candidate.name.trim() : `Categorie ${index + 1}`;
+  const name =
+    typeof candidate.name === 'string' && candidate.name.trim().length > 0
+      ? candidate.name.trim()
+      : `Categorie ${index + 1}`;
   const description = typeof candidate.description === 'string' ? candidate.description : '';
-  const imageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0 ? candidate.imageUrl : undefined;
+  const imageUrl =
+    typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0
+      ? candidate.imageUrl
+      : undefined;
 
   return {
     id,
@@ -117,41 +125,76 @@ const normalizeCategory = (value: unknown, index: number): LiveCatalogCategory |
   };
 };
 
-const normalizeProduct = (value: unknown, fallbackCategoryId: string): LiveCatalogProduct | null => {
+const normalizeProduct = (
+  value: unknown,
+  fallbackCategoryId: string,
+): LiveCatalogProduct | null => {
   if (!value || typeof value !== 'object') return null;
 
   const candidate = value as Partial<LiveCatalogProduct>;
-  const id = typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
+  const id =
+    typeof candidate.id === 'string' && candidate.id.trim().length > 0 ? candidate.id.trim() : '';
   if (!id) return null;
 
   const categoryId =
     typeof candidate.categoryId === 'string' && candidate.categoryId.trim().length > 0
       ? candidate.categoryId.trim()
       : fallbackCategoryId;
-  const name = typeof candidate.name === 'string' && candidate.name.trim().length > 0 ? candidate.name.trim() : 'Produs';
-  const brand = typeof candidate.brand === 'string' && candidate.brand.trim().length > 0 ? candidate.brand.trim() : 'Dacus';
+  const name =
+    typeof candidate.name === 'string' && candidate.name.trim().length > 0
+      ? candidate.name.trim()
+      : 'Produs';
+  const brand =
+    typeof candidate.brand === 'string' && candidate.brand.trim().length > 0
+      ? candidate.brand.trim()
+      : 'Dacus';
   const stockLabel =
-    typeof candidate.stockLabel === 'string' && candidate.stockLabel.trim().length > 0 ? candidate.stockLabel.trim() : 'În stoc';
+    typeof candidate.stockLabel === 'string' && candidate.stockLabel.trim().length > 0
+      ? candidate.stockLabel.trim()
+      : 'În stoc';
   const priceRon =
-    typeof candidate.priceRon === 'number' && Number.isFinite(candidate.priceRon) ? Number(candidate.priceRon) : 0;
+    typeof candidate.priceRon === 'number' && Number.isFinite(candidate.priceRon)
+      ? Number(candidate.priceRon)
+      : 0;
 
-  const imageUrl = typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0 ? candidate.imageUrl : undefined;
+  const imageUrl =
+    typeof candidate.imageUrl === 'string' && candidate.imageUrl.length > 0
+      ? candidate.imageUrl
+      : undefined;
   const thumbnailUrl =
-    typeof candidate.thumbnailUrl === 'string' && candidate.thumbnailUrl.length > 0 ? candidate.thumbnailUrl : undefined;
+    typeof candidate.thumbnailUrl === 'string' && candidate.thumbnailUrl.length > 0
+      ? candidate.thumbnailUrl
+      : undefined;
   const description = typeof candidate.description === 'string' ? candidate.description : undefined;
   const oldPriceRon =
-    typeof candidate.oldPriceRon === 'number' && Number.isFinite(candidate.oldPriceRon) ? Number(candidate.oldPriceRon) : undefined;
-  const handle = typeof candidate.handle === 'string' && candidate.handle.length > 0 ? candidate.handle : undefined;
-  const sku = typeof candidate.sku === 'string' && candidate.sku.length > 0 ? candidate.sku : undefined;
-  const variantId = typeof candidate.variantId === 'string' && candidate.variantId.length > 0 ? candidate.variantId : undefined;
+    typeof candidate.oldPriceRon === 'number' && Number.isFinite(candidate.oldPriceRon)
+      ? Number(candidate.oldPriceRon)
+      : undefined;
+  const handle =
+    typeof candidate.handle === 'string' && candidate.handle.length > 0
+      ? candidate.handle
+      : undefined;
+  const sku =
+    typeof candidate.sku === 'string' && candidate.sku.length > 0 ? candidate.sku : undefined;
+  const variantId =
+    typeof candidate.variantId === 'string' && candidate.variantId.length > 0
+      ? candidate.variantId
+      : undefined;
   const categoryIds = Array.isArray(candidate.categoryIds)
-    ? candidate.categoryIds.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    ? candidate.categoryIds.filter(
+        (item): item is string => typeof item === 'string' && item.length > 0,
+      )
     : undefined;
   const variants = Array.isArray(candidate.variants)
     ? candidate.variants
         .map((variant) => {
           if (!variant || typeof variant !== 'object') return null;
-          const item = variant as { id?: unknown; name?: unknown; priceRon?: unknown; inStock?: unknown };
+          const item = variant as {
+            id?: unknown;
+            name?: unknown;
+            priceRon?: unknown;
+            inStock?: unknown;
+          };
           if (typeof item.id !== 'string' || item.id.length === 0) return null;
           if (typeof item.name !== 'string' || item.name.length === 0) return null;
           if (typeof item.priceRon !== 'number' || !Number.isFinite(item.priceRon)) return null;
@@ -203,7 +246,9 @@ const normalizePayload = (payload: CatalogApiPayload): LiveCatalogPayload => ({
 });
 
 const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPayload> => {
-  const baseUrl = mobileEnv.apiBaseUrl.endsWith('/') ? mobileEnv.apiBaseUrl : `${mobileEnv.apiBaseUrl}/`;
+  const baseUrl = mobileEnv.apiBaseUrl.endsWith('/')
+    ? mobileEnv.apiBaseUrl
+    : `${mobileEnv.apiBaseUrl}/`;
   const url = new URL('catalog', baseUrl);
 
   if (options?.startAfterCursor) {
@@ -248,26 +293,51 @@ const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPay
   return normalizePayload(payload);
 };
 
-export const loadLiveCatalog = async (options?: LoadCatalogOptions): Promise<LiveCatalogPayload> => {
-  return loadFromApi({
-    includeCategories: options?.includeCategories ?? true,
-    pageSize: options?.pageSize,
-    startAfterCursor: options?.startAfterCursor,
-    leanQuery: options?.leanQuery ?? true,
-  });
+export const loadLiveCatalog = async (
+  options?: LoadCatalogOptions,
+): Promise<LiveCatalogPayload> => {
+  try {
+    const result = await getCatalogFromFn(undefined, options?.pageSize || 250);
+    return {
+      categories: result.categories as LiveCatalogCategory[],
+      products: result.products as LiveCatalogProduct[],
+      hasMoreProducts: result.hasMoreProducts,
+      productsCursor: result.productsCursor,
+    };
+  } catch {
+    return loadFromApi({
+      includeCategories: options?.includeCategories ?? true,
+      pageSize: options?.pageSize,
+      startAfterCursor: options?.startAfterCursor,
+      leanQuery: options?.leanQuery ?? true,
+    });
+  }
 };
 
 export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> => {
+  // Use Firebase Functions (getCatalog already includes stamp)
+  try {
+    const result = await getCatalogFromFn(undefined, 1); // Just get 1 product to check stamp
+    return { stamp: result.stamp ?? 'updated' };
+  } catch {
+    // Fallback to old API
+  }
+
   if (isLikelyLocalApiBaseUrl(mobileEnv.apiBaseUrl)) return null;
 
-  const baseUrl = mobileEnv.apiBaseUrl.endsWith('/') ? mobileEnv.apiBaseUrl : `${mobileEnv.apiBaseUrl}/`;
+  const baseUrl = mobileEnv.apiBaseUrl.endsWith('/')
+    ? mobileEnv.apiBaseUrl
+    : `${mobileEnv.apiBaseUrl}/`;
   const url = new URL('catalog/stamp', baseUrl);
 
   try {
     const response = await fetchWithRetry(() =>
       (async () => {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), Math.max(3500, Math.trunc(mobileEnv.storefrontTimeoutMs * 0.6)));
+        const timeout = setTimeout(
+          () => controller.abort(),
+          Math.max(3500, Math.trunc(mobileEnv.storefrontTimeoutMs * 0.6)),
+        );
 
         try {
           const requestResponse = await fetch(url.toString(), {
@@ -339,4 +409,3 @@ export const streamLiveCatalogProductsAfterCursor = async (
 
   return loadedTotal;
 };
-

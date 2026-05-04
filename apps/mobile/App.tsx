@@ -1,9 +1,13 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
+import { registerCatalogBackgroundTask } from './src/services/backgroundCatalogRefresh';
+import { initFirebase } from './src/services/firebaseAuth';
 import QRCodeMatrix from './src/components/QRCodeMatrix';
 import {
   Share,
+  Alert,
   Dimensions,
   FlatList,
   Image,
@@ -19,7 +23,8 @@ import {
   View,
 } from 'react-native';
 
-import dacusLogo from './assets/icon.png';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const dacusLogo = require('./assets/dacus-logo.png');
 import { AdvancedSearch } from './src/components/AdvancedSearch';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { type CatalogCategory, type CatalogProduct } from './src/data/catalog';
@@ -28,10 +33,12 @@ import { ProductCard } from './src/components/ProductCard';
 import { RegisterScreen } from './src/components/RegisterScreen';
 import { Skeleton } from './src/components/Skeleton';
 import { NavigationBar } from './src/components/NavigationBar';
+import { Ionicons } from '@expo/vector-icons';
 import { useCatalog } from './src/hooks/useCatalog';
 import { AccountScreen } from './src/screens/AccountScreen';
 import { CartScreen } from './src/screens/CartScreen';
 import { CategoriesScreen } from './src/screens/CategoriesScreen';
+import { CheckoutScreen } from './src/screens/CheckoutScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LoyaltyScreen } from './src/screens/LoyaltyScreen';
 import { ProductDetailsScreen } from './src/screens/ProductDetailsScreen';
@@ -99,6 +106,7 @@ import {
   type PriceFilterOption,
   type SortOption,
 } from './src/utils/catalogFilters';
+import { fixRomanianMojibake } from './src/utils/string';
 
 type Page =
   | 'home'
@@ -106,6 +114,7 @@ type Page =
   | 'products'
   | 'productDetails'
   | 'cart'
+  | 'checkout'
   | 'loyalty'
   | 'account'
   | 'settings'
@@ -120,9 +129,9 @@ const loyaltyTiers: Array<{ name: LoyaltyTierName; min: number; max: number }> =
 ];
 
 const loyaltyTierBenefits: Record<LoyaltyTierName, string> = {
-  Bronze: 'Acumulare standard de puncte È™i acces la vouchere de bazÄƒ.',
-  Silver: 'Prioritate la campanii È™i oferte dedicate membrilor Silver.',
-  Gold: 'Beneficii premium, prioritate maximÄƒ È™i suport preferenÈ›ial.',
+  Bronze: 'Acumulare standard de puncte și acces la vouchere de bază.',
+  Silver: 'Prioritate la campanii și oferte dedicate membrilor Silver.',
+  Gold: 'Beneficii premium, prioritate maximă și suport preferențial.',
 };
 
 const HOME_SECTIONS_LIMIT = 6;
@@ -137,9 +146,9 @@ const defaultLoyalty: LoyaltySummary = {
 };
 
 const orderStatusLabels: Record<Order['status'], string> = {
-  created: 'ComandÄƒ plasatÄƒ',
-  processing: 'ÃŽn procesare',
-  shipped: 'ExpediatÄƒ',
+  created: 'Comandă plasată',
+  processing: 'În procesare',
+  shipped: 'Expediată',
 };
 
 const standaloneAuthPages: Page[] = ['login', 'register'];
@@ -148,12 +157,12 @@ const isStandaloneAuthPage = (value: Page) => standaloneAuthPages.includes(value
 
 const authScreenTitles: Record<'login' | 'register', string> = {
   login: 'Autentificare',
-  register: 'CreeazÄƒ cont',
+  register: 'Creează cont',
 };
 
 const authScreenSubtitles: Record<'login' | 'register', string> = {
-  login: 'ConecteazÄƒ-te pentru a accesa comenzile, punctele È™i notificÄƒrile.',
-  register: 'CreeazÄƒ un cont nou pentru o experienÈ›Äƒ completÄƒ Ã®n aplicaÈ›ie.',
+  login: 'Conectează-te pentru a accesa comenzile, punctele și notificările.',
+  register: 'Creează un cont nou pentru o experiență completă în aplicație.',
 };
 
 const stripCategoryPrefixes = (value: string) => value.replace(/^product-type-/i, '');
@@ -205,6 +214,9 @@ const pickBestCategoryForHome = (
 
 const hasImageUrl = (value: string | undefined): value is string =>
   !!value && /^https?:\/\//.test(value);
+
+const safeText = (value: string | null | undefined) =>
+  typeof value === 'string' ? fixRomanianMojibake(value) : value;
 
 const extractVendorsFromFacets = (facets: SearchFacet[] | undefined) => {
   const vendorFacet = (facets ?? []).find((facet) => facet.field_name === 'vendor');
@@ -289,17 +301,43 @@ const buildFilterSummaryLabel = (input: {
 }) => {
   const chunks: string[] = [];
   if (input.brandFilter !== 'toate') chunks.push(`Brand ${input.brandFilter}`);
-  if (input.priceFilter !== 'toate') chunks.push(`PreÈ› ${input.priceFilter}`);
-  if (input.onlyDiscount) chunks.push('PromoÈ›ii');
+  if (input.priceFilter !== 'toate') chunks.push(`Preț ${input.priceFilter}`);
+  if (input.onlyDiscount) chunks.push('Promoții');
   if (!input.onlyInStock) chunks.push('Include stoc epuizat');
   if (input.sortOption !== 'relevanta') chunks.push(`Sort ${input.sortOption}`);
-  return chunks.join(' Â· ');
+  return chunks.join(' · ');
 };
 
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function AppContent() {
   const [page, setPage] = useState<Page>('home');
+  const pageFadeAnim = useRef(new Animated.Value(1)).current;
+  const [previousPage, setPreviousPage] = useState<Page | null>(null);
+
+  const smoothNavigate = useCallback(
+    (newPage: Page) => {
+      if (newPage === page) return;
+
+      // Fade out current page
+      Animated.timing(pageFadeAnim, {
+        toValue: 0.3,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        setPreviousPage(page);
+        setPage(newPage);
+
+        // Fade in new page
+        Animated.timing(pageFadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      });
+    },
+    [page, pageFadeAnim],
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const {
     categories,
@@ -335,6 +373,8 @@ function AppContent() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [searchPreviewResults, setSearchPreviewResults] = useState<CatalogProduct[]>([]);
+  const [searchPreviewLoading, setSearchPreviewLoading] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [savedSearches, setSavedSearches] = useState<string[]>([]);
   const [recentFilterSnapshots, setRecentFilterSnapshots] = useState<RecentFilterSnapshot[]>([]);
@@ -378,6 +418,7 @@ function AppContent() {
   const [addressEditorId, setAddressEditorId] = useState<string | null>(null);
   const [addressFormError, setAddressFormError] = useState<string | null>(null);
   const [addressDraft, setAddressDraft] = useState<AddressDraft>(() => buildInitialAddressDraft());
+  const [checkoutAddressDraft, setCheckoutAddressDraft] = useState<AddressDraft | null>(null);
   const [homeSnapshot, setHomeSnapshot] = useState<{
     categories: CatalogCategory[];
     products: CatalogProduct[];
@@ -399,6 +440,12 @@ function AppContent() {
 
   useEffect(() => {
     console.log('[BOOT][AppContent] mounted');
+
+    // Initialize Firebase
+    initFirebase();
+
+    // Register background catalog refresh task
+    void registerCatalogBackgroundTask();
   }, []);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -408,6 +455,7 @@ function AppContent() {
     products: 0,
     productDetails: 0,
     cart: 0,
+    checkout: 0,
     loyalty: 0,
     account: 0,
     settings: 0,
@@ -623,16 +671,16 @@ function AppContent() {
     const hints: Array<{ label: string; tone: 'success' | 'warning' | 'info' | 'danger' }> = [];
     const visibleCount = productsResultsSource.length;
     if (visibleCount > 0 && visibleCount <= 8) {
-      hints.push({ label: 'Rezultate puÈ›ine â€” Ã®ncearcÄƒ filtre mai largi', tone: 'warning' });
+      hints.push({ label: 'Rezultate puține - încearcă filtre mai largi', tone: 'warning' });
     }
     if (availabilityFacetCounts.inStock > 0 && availabilityFacetCounts.outOfStock === 0) {
-      hints.push({ label: 'Stoc excelent pentru selecÈ›ia curentÄƒ', tone: 'success' });
+      hints.push({ label: 'Stoc excelent pentru selecția curentă', tone: 'success' });
     }
     if (availabilityFacetCounts.outOfStock > availabilityFacetCounts.inStock) {
       hints.push({ label: 'Multe produse au stoc limitat', tone: 'danger' });
     }
     if (searchQuery.trim().length > 0 && visibleCount > 20) {
-      hints.push({ label: 'Rezultate bogate â€” foloseÈ™te filtre inteligente', tone: 'info' });
+      hints.push({ label: 'Rezultate bogate - folosește filtre inteligente', tone: 'info' });
     }
     return hints.slice(0, 3);
   }, [
@@ -697,12 +745,12 @@ function AppContent() {
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cartItems.reduce((sum, item) => sum + item.unitPriceRon * item.quantity, 0);
   const deliveryEtaLabel = useMemo(() => {
-    if (cartItems.length === 0) return 'AdaugÄƒ produse pentru estimare livrare.';
+    if (cartItems.length === 0) return 'Adaugă produse pentru estimare livrare.';
     const hasHighRisk = cartItems.some(
       (item) => item.stockRiskLabel?.includes('critic') || item.stockRiskLabel?.includes('ridicat'),
     );
     return hasHighRisk
-      ? 'ETA livrare: 2-4 zile lucrÄƒtoare (stoc variabil)'
+      ? 'ETA livrare: 2-4 zile lucrătoare (stoc variabil)'
       : 'ETA livrare: 24-48h pentru majoritatea produselor';
   }, [cartItems]);
 
@@ -712,7 +760,7 @@ function AppContent() {
       return Math.abs(item.unitPriceRon - base) >= 0.01;
     });
     if (changed.length === 0) return null;
-    return `${changed.length} produs(e) au preÈ› actualizat Ã®n coÈ™ (promoÈ›ii sau variantÄƒ selectatÄƒ).`;
+    return `${changed.length} produs(e) au preț actualizat în coș (promoții sau variantă selectată).`;
   }, [cartItems]);
 
   const addressQualityScore = useMemo(() => getAddressQualityScore(addressDraft), [addressDraft]);
@@ -908,9 +956,9 @@ function AppContent() {
     Number(facetCategoryId.length > 0);
 
   const sortLabelMap: Record<SortOption, string> = {
-    relevanta: 'RelevanÈ›Äƒ',
-    pretCrescator: 'PreÈ› crescÄƒtor',
-    pretDescrescator: 'PreÈ› descrescÄƒtor',
+    relevanta: 'Relevanță',
+    pretCrescator: 'Preț crescător',
+    pretDescrescator: 'Preț descrescător',
     numeAZ: 'Nume A-Z',
   };
 
@@ -1005,7 +1053,7 @@ function AppContent() {
         setLoyalty(payload.summary);
         setLoyaltyQrToken(payload.qrToken);
         setHasRequestedProfileQr(true);
-        setCatalogMeta('Codul de membru este pregÄƒtit pentru scanare.');
+        setCatalogMeta('Codul de membru este pregătit pentru scanare.');
       })
       .catch((error) => {
         console.error('[BOOT][AuthHydration] loyalty QR generation failed', error);
@@ -1027,7 +1075,14 @@ function AppContent() {
   }, [categories, homeSnapshot, products]);
 
   useEffect(() => {
-    setShowBackTop((pageScrollOffsetsRef.current[page] ?? 0) > 420);
+    if (page === 'productDetails') return;
+    restoringScrollRef.current = true;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    pageScrollOffsetsRef.current[page] = 0;
+    setShowBackTop(false);
+    setTimeout(() => {
+      restoringScrollRef.current = false;
+    }, 60);
   }, [page]);
 
   useEffect(() => {
@@ -1046,8 +1101,20 @@ function AppContent() {
   }, [page, selectedProductId]);
 
   useEffect(() => {
-    void restoreAccount().then((user) => {
+    void restoreAccount().then(async (user) => {
       if (!user) return;
+
+      // Verify biometric if enabled
+      if (accountSettings.biometricLoginEnabled) {
+        const { authenticateWithBiometric } = await import('./src/services/biometric');
+        const result = await authenticateWithBiometric('Autentifică-te pentru a accesa contul');
+        if (!result.success) {
+          console.log('[BOOT][Biometric] Verification failed, logging out');
+          await logoutAccount();
+          return;
+        }
+      }
+
       console.log('[BOOT][AuthHydration] restoreAccount succeeded', {
         userId: user.id,
         email: user.email,
@@ -1143,8 +1210,7 @@ function AppContent() {
 
     const requestPerPage =
       searchQuery.trim().length > 0 ? PRODUCTS_PAGE_SIZE * 2 : PRODUCTS_PAGE_SIZE;
-    const effectiveCategoryId =
-      searchQuery.trim().length === 0 ? selectedCategoryId : facetCategoryId || undefined;
+    const effectiveCategoryId = searchQuery.trim().length === 0 ? selectedCategoryId : undefined;
 
     void fetchProductSearch({
       query: searchQuery,
@@ -1170,9 +1236,7 @@ function AppContent() {
       })
       .catch((error) => {
         setCatalogError(
-          error instanceof Error
-            ? error.message
-            : 'CÄƒutarea rapidÄƒ este indisponibilÄƒ momentan.',
+          error instanceof Error ? error.message : 'Căutarea rapidă este indisponibilă momentan.',
         );
         setSearchResults([]);
         setProductsHasMore(false);
@@ -1349,7 +1413,7 @@ function AppContent() {
         .then((lines) => setCart(lines))
         .catch((error) => {
           const message =
-            error instanceof Error ? error.message : 'Nu am putut elimina produsul din coÈ™.';
+            error instanceof Error ? error.message : 'Nu am putut elimina produsul din coș.';
           setCatalogError(message);
           showToast(message, 'error');
         });
@@ -1378,7 +1442,7 @@ function AppContent() {
       void upsertCartLine(line).catch(() => undefined);
     }
 
-    showToast('Produs restaurat Ã®n coÈ™.');
+    showToast('Produs restaurat în coș.');
   };
 
   const openCategory = (categoryId: string) => {
@@ -1459,6 +1523,7 @@ function AppContent() {
   const clearSearch = () => {
     setSearchQuery('');
     setSearchSuggestions([]);
+    setSearchPreviewResults([]);
     setFacetCategoryId('');
   };
 
@@ -1471,7 +1536,7 @@ function AppContent() {
 
   const toggleOnlyFavorites = () => {
     if (!accountUser && !onlyFavorites) {
-      setCatalogError('AutentificÄƒ-te pentru a filtra doar produsele favorite.');
+      setCatalogError('Autentifică-te pentru a filtra doar produsele favorite.');
       goToLogin('products');
       return;
     }
@@ -1480,16 +1545,45 @@ function AppContent() {
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-    if (value.trim().length > 0 && page !== 'products') {
-      setPage('products');
-    }
-
     if (value.trim().length >= 2) {
+      setSearchPreviewLoading(true);
       void fetchSearchSuggestions(value)
         .then((items) => setSearchSuggestions(items))
-        .catch(() => setSearchSuggestions([]));
+        .catch((error) => {
+          console.warn('[Search] Suggestions fetch failed', error);
+          setSearchSuggestions([]);
+        });
+
+      void fetchProductSearch({
+        query: value,
+        page: 1,
+        perPage: 6,
+        sortBy: 'relevanta',
+      })
+        .then((payload) => {
+          console.log('[Search] Preview results arrived', payload.products.length);
+          setSearchPreviewResults(payload.products);
+          upsertProducts(payload.products);
+        })
+        .catch((error) => {
+          console.warn('[Search] Product search failed, using client-side fallback', error);
+          // Fallback: client-side search through existing products
+          const queryLower = value.trim().toLowerCase();
+          const matches = products.filter((product) => {
+            const nameMatch = product.name.toLowerCase().includes(queryLower);
+            const brandMatch = product.brand.toLowerCase().includes(queryLower);
+            const skuMatch = product.sku?.toLowerCase().includes(queryLower);
+            const handleMatch = product.handle?.toLowerCase().includes(queryLower);
+            return nameMatch || brandMatch || skuMatch || handleMatch;
+          });
+          console.log('[Search] Client-side fallback found', matches.length, 'matches');
+          setSearchPreviewResults(matches.slice(0, 6));
+        })
+        .finally(() => setSearchPreviewLoading(false));
     } else {
       setSearchSuggestions([]);
+      setSearchPreviewResults([]);
+      setSearchPreviewLoading(false);
     }
   };
 
@@ -1526,13 +1620,47 @@ function AppContent() {
       );
     }
 
-    if (page !== 'products') {
-      setPage('products');
-    }
-
     void fetchSearchSuggestions(query)
       .then((items) => setSearchSuggestions(items))
       .catch(() => setSearchSuggestions([]));
+
+    setSearchPreviewLoading(true);
+    void fetchProductSearch({
+      query,
+      page: 1,
+      perPage: 6,
+      sortBy: 'relevanta',
+    })
+      .then((payload) => {
+        setSearchPreviewResults(payload.products);
+        upsertProducts(payload.products);
+      })
+      .catch((error) => {
+        console.warn('[Search] Product search failed on submit, using fallback', error);
+        const queryLower = query.toLowerCase();
+        const matches = products.filter((product) => {
+          const nameMatch = product.name.toLowerCase().includes(queryLower);
+          const brandMatch = product.brand.toLowerCase().includes(queryLower);
+          const skuMatch = product.sku?.toLowerCase().includes(queryLower);
+          const handleMatch = product.handle?.toLowerCase().includes(queryLower);
+          return nameMatch || brandMatch || skuMatch || handleMatch;
+        });
+        setSearchPreviewResults(matches.slice(0, 6));
+      })
+      .finally(() => setSearchPreviewLoading(false));
+  };
+
+  const handleSearchProductSelect = (productId: string) => {
+    if (!productId) return;
+    setSearchHistory((prev) => {
+      const product = productsById.get(productId);
+      const label = product?.name?.trim();
+      if (!label) return prev;
+      return [label, ...prev.filter((item) => item !== label)].slice(0, 8);
+    });
+    setSearchSuggestions([]);
+    setSearchPreviewResults([]);
+    openProduct(productId);
   };
 
   const saveSearchQuery = (query: string) => {
@@ -1541,7 +1669,7 @@ function AppContent() {
     setSavedSearches((prev) =>
       [normalized, ...prev.filter((item) => item !== normalized)].slice(0, 8),
     );
-    showToast('CÄƒutare salvatÄƒ.');
+    showToast('Căutare salvată.');
   };
 
   const applyRecentFilterSnapshot = (snapshotId: string) => {
@@ -1576,7 +1704,7 @@ function AppContent() {
 
   const openDeviceSessions = () => {
     if (!accountUser) {
-      showToast('AutentificÄƒ-te pentru a gestiona sesiunile dispozitivului.', 'error');
+      showToast('Autentifică-te pentru a gestiona sesiunile dispozitivului.', 'error');
       return;
     }
 
@@ -1591,7 +1719,7 @@ function AppContent() {
     void revokeDeviceSession(sessionId)
       .then((sessions) => {
         setDeviceSessions(sessions);
-        showToast('Sesiunea dispozitivului a fost revocatÄƒ.');
+        showToast('Sesiunea dispozitivului a fost revocată.');
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : 'Nu am putut revoca sesiunea.';
@@ -1661,21 +1789,51 @@ function AppContent() {
     showToast(
       enable
         ? 'Login biometric activat pe acest dispozitiv.'
-        : 'PoÈ›i activa loginul biometric din SetÄƒri cont.',
+        : 'Poți activa loginul biometric din Setări cont.',
     );
   };
 
-  const toggleBiometricLoginSetting = () => {
-    const nextEnabled = !accountSettings.biometricLoginEnabled;
-    persistPreferences((current) => ({
-      ...current,
-      accountSettings: {
-        ...current.accountSettings,
-        biometricLoginEnabled: nextEnabled,
-        biometricPromptShown: true,
-      },
-    }));
-    showToast(nextEnabled ? 'Login biometric activat.' : 'Login biometric dezactivat.');
+  const toggleBiometricLoginSetting = async () => {
+    const currentEnabled = accountSettings.biometricLoginEnabled;
+
+    // If turning OFF, just disable without verification
+    if (currentEnabled) {
+      persistPreferences((current) => ({
+        ...current,
+        accountSettings: {
+          ...current.accountSettings,
+          biometricLoginEnabled: false,
+          biometricPromptShown: true,
+        },
+      }));
+      showToast('Login biometric dezactivat.');
+      return;
+    }
+
+    // If turning ON, verify biometric first
+    const { isBiometricAvailable, authenticateWithBiometric } =
+      await import('./src/services/biometric');
+
+    const available = await isBiometricAvailable();
+    if (!available) {
+      showToast('Biometric nu este disponibil pe acest dispozitiv.');
+      return;
+    }
+
+    const result = await authenticateWithBiometric('Activează login-ul biometric');
+    if (result.success) {
+      persistPreferences((current) => ({
+        ...current,
+        accountSettings: {
+          ...current.accountSettings,
+          biometricLoginEnabled: true,
+          biometricPromptShown: true,
+        },
+      }));
+      showToast('Login biometric activat.');
+    } else {
+      showToast(result.error || 'Nu am putut activa login-ul biometric.');
+    }
   };
 
   const mergeAccountSettings = (
@@ -1780,7 +1938,7 @@ function AppContent() {
 
   const retryLoadProfileQr = () => {
     if (!accountUser) {
-      setCatalogError('AutentificÄƒ-te pentru a genera codul QR de fidelitate.');
+      setCatalogError('Autentifică-te pentru a genera codul QR de fidelitate.');
       goToLogin('loyalty');
       return;
     }
@@ -1848,7 +2006,7 @@ function AppContent() {
 
   const saveCurrentCartAsList = () => {
     if (cart.length === 0) {
-      showToast('CoÈ™ul este gol. Nu existÄƒ nimic de salvat.', 'error');
+      showToast('Coșul este gol. Nu există nimic de salvat.', 'error');
       return;
     }
 
@@ -1869,7 +2027,7 @@ function AppContent() {
       ...current,
       savedCartLists: [snapshot, ...current.savedCartLists].slice(0, 15),
     }));
-    showToast('CoÈ™ul a fost salvat ca listÄƒ.');
+    showToast('Coșul a fost salvat ca listă.');
   };
 
   const restoreCartList = (listId: string) => {
@@ -1882,17 +2040,17 @@ function AppContent() {
       void replaceCartLines(list.lines)
         .then((lines) => {
           setCart(lines);
-          showToast(`ListÄƒ restauratÄƒ: ${list.name}`);
+          showToast(`Listă restaurată: ${list.name}`);
         })
         .catch((error) => {
           setCart(previousCart);
           const message =
-            error instanceof Error ? error.message : 'Nu am putut restaura lista Ã®n coÈ™.';
+            error instanceof Error ? error.message : 'Nu am putut restaura lista în coș.';
           showToast(message, 'error');
         });
       return;
     }
-    showToast(`ListÄƒ restauratÄƒ: ${list.name}`);
+    showToast(`Listă restaurată: ${list.name}`);
   };
 
   const removeSavedCartList = (listId: string) => {
@@ -1953,7 +2111,7 @@ function AppContent() {
         completed: true,
       },
     }));
-    showToast('PreferinÈ›ele tale au fost salvate.');
+    showToast('Preferințele tale au fost salvate.');
   };
 
   const goToLogin = (redirectPage: Page = page) => {
@@ -1977,8 +2135,8 @@ function AppContent() {
 
     if (orderDetailsById[orderId]) {
       const cached = orderDetailsById[orderId];
-      const addressLabel = cached?.address?.label ?? 'fÄƒrÄƒ adresÄƒ';
-      showToast(`Detalii comandÄƒ: ${orderId} â€¢ ${addressLabel}`);
+      const addressLabel = cached?.address?.label ?? 'fără adresă';
+      showToast(`Detalii comandă: ${orderId} · ${addressLabel}`);
       return;
     }
 
@@ -1988,12 +2146,12 @@ function AppContent() {
           ...prev,
           [orderId]: payload,
         }));
-        const addressLabel = payload.address?.label ?? 'fÄƒrÄƒ adresÄƒ';
-        showToast(`Detalii comandÄƒ Ã®ncÄƒrcate: ${addressLabel}`);
+        const addressLabel = payload.address?.label ?? 'fără adresă';
+        showToast(`Detalii comandă încărcate: ${addressLabel}`);
       })
       .catch((error) => {
         const message =
-          error instanceof Error ? error.message : 'Nu am putut Ã®ncÄƒrca detaliile comenzii.';
+          error instanceof Error ? error.message : 'Nu am putut încărca detaliile comenzii.';
         setCatalogError(message);
         showToast(message, 'error');
       });
@@ -2006,14 +2164,14 @@ function AppContent() {
           <View style={styles.accountHeroCard}>
             <Text style={styles.sectionLabel}>Cont client</Text>
             <Text style={styles.bodyMuted}>
-              AutentificÄƒ-te pentru comenzi, puncte, adrese È™i setÄƒri personalizate.
+              Autentifică-te pentru comenzi, puncte, adrese și setări personalizate.
             </Text>
             <View style={styles.stackSmall}>
               <TouchableOpacity style={styles.primaryButton} onPress={() => goToLogin()}>
-                <Text style={styles.primaryButtonText}>IntrÄƒ Ã®n cont</Text>
+                <Text style={styles.primaryButtonText}>Intră în cont</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => goToRegister()}>
-                <Text style={styles.secondaryButtonText}>CreeazÄƒ cont nou</Text>
+                <Text style={styles.secondaryButtonText}>Creează cont nou</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setPage('settings')}>
                 <Text style={styles.secondaryButtonText}>Setari locale</Text>
@@ -2038,12 +2196,12 @@ function AppContent() {
     const journeyChecklist = [
       {
         id: 'prefs',
-        label: 'PreferinÈ›e personalizate configurate',
+        label: 'Preferințe personalizate configurate',
         done: preferenceOnboarding.completed,
       },
-      { id: 'address', label: 'AdresÄƒ de livrare salvatÄƒ', done: addresses.length > 0 },
+      { id: 'address', label: 'Adresă de livrare salvată', done: addresses.length > 0 },
       { id: 'qr', label: 'Cod QR fidelitate activ', done: Boolean(loyaltyQrToken) },
-      { id: 'order', label: 'Prima comandÄƒ plasatÄƒ', done: orders.length > 0 },
+      { id: 'order', label: 'Prima comandă plasată', done: orders.length > 0 },
     ];
     const journeyPendingCount = journeyChecklist.filter((item) => !item.done).length;
     const segmentTabs: Array<{ id: AccountSegment; label: string; badge?: number }> = [
@@ -2058,7 +2216,7 @@ function AppContent() {
         ...(pendingOrdersCount > 0 ? { badge: pendingOrdersCount } : {}),
       },
       { id: 'addresses', label: 'Adrese' },
-      { id: 'privacy', label: 'ConfidenÈ›ialitate' },
+      { id: 'privacy', label: 'Confidențialitate' },
       {
         id: 'journey',
         label: 'Ghid',
@@ -2068,66 +2226,114 @@ function AppContent() {
 
     return (
       <View style={styles.stackLarge}>
-        <View style={styles.accountHeroCard}>
-          <View style={styles.accountHeroHead}>
-            <View style={styles.accountAvatar}>
-              <Text style={styles.accountAvatarText}>{initials || 'DC'}</Text>
-            </View>
-            <View style={styles.accountHeroMetaWrap}>
-              <Text style={styles.accountHeroName}>{accountName || 'Utilizator Dacus'}</Text>
-              <Text style={styles.accountHeroEmail}>{accountUser.email || '-'}</Text>
-            </View>
-          </View>
-
-          <View style={styles.accountStatsRow}>
-            <View style={styles.accountStatCard}>
-              <Text style={styles.accountStatLabel}>Puncte fidelitate</Text>
-              <Text style={styles.accountStatValue}>{loyalty.points.toLocaleString('ro-RO')}</Text>
-            </View>
-            <View style={styles.accountStatCard}>
-              <Text style={styles.accountStatLabel}>Dispozitive conectate</Text>
-              <Text style={styles.accountStatValue}>{deviceSessions.length}</Text>
-            </View>
-            <View style={styles.accountStatCard}>
-              <Text style={styles.accountStatLabel}>Comenzi</Text>
-              <Text style={styles.accountStatValue}>{orders.length}</Text>
-            </View>
-          </View>
-
-          <View style={styles.accountInlineActions}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => setPage('settings')}>
-              <Text style={styles.secondaryButtonText}>Setari cont</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={openDeviceSessions}>
-              <Text style={styles.secondaryButtonText}>Sesiuni active</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.accountQrPanel}>
-            <Text style={styles.sectionLabel}>Codul tÄƒu de membru</Text>
-            {loyaltyQrToken ? (
-              <TouchableOpacity
-                style={styles.qrTapWrap}
-                activeOpacity={0.9}
-                onPress={openLoyaltyQrPreview}
-              >
-                <QRCodeMatrix value={loyaltyQrToken} size={168} />
-              </TouchableOpacity>
-            ) : hasRequestedProfileQr ? (
-              <Text style={styles.accountQrHint}>Se genereazÄƒ codul QR...</Text>
-            ) : profileQrError ? (
-              <View style={styles.stackSmall}>
-                <Text style={styles.accountQrError}>{profileQrError}</Text>
-                <TouchableOpacity style={styles.secondaryButton} onPress={retryLoadProfileQr}>
-                  <Text style={styles.secondaryButtonText}>ReÃ®ncearcÄƒ</Text>
-                </TouchableOpacity>
+        {/* Account Header Card */}
+        <View style={styles.accountHeaderCard}>
+          <View style={styles.accountProfileSection}>
+            <View style={styles.accountAvatarContainer}>
+              <View style={styles.accountAvatar}>
+                <Text style={styles.accountAvatarText}>{initials || 'DC'}</Text>
               </View>
-            ) : (
-              <TouchableOpacity style={styles.secondaryButton} onPress={retryLoadProfileQr}>
-                <Text style={styles.secondaryButtonText}>GenereazÄƒ codul QR</Text>
+              <TouchableOpacity style={styles.editProfileButton}>
+                <MaterialCommunityIcons name="pencil" size={16} color={colors.brandBlue} />
               </TouchableOpacity>
-            )}
+            </View>
+
+            <View style={styles.accountProfileInfo}>
+              <Text style={styles.accountName}>{accountName || 'Utilizator Dacus'}</Text>
+              <Text style={styles.accountEmail}>{accountUser.email || '-'}</Text>
+              <View style={styles.accountMembershipBadge}>
+                <MaterialCommunityIcons name="crown" size={14} color="#FFD700" />
+                <Text style={styles.accountMembershipText}>
+                  {loyalty.tier === 'Gold'
+                    ? 'Membru Gold'
+                    : loyalty.tier === 'Silver'
+                      ? 'Membru Silver'
+                      : 'Membru Bronze'}
+                </Text>
+              </View>
+            </View>
           </View>
+
+          {/* Quick Stats */}
+          <View style={styles.accountStatsGrid}>
+            <View style={styles.accountStatItem}>
+              <MaterialCommunityIcons name="star-circle" size={24} color="#F59E0B" />
+              <Text style={styles.accountStatNumber}>{loyalty.points.toLocaleString('ro-RO')}</Text>
+              <Text style={styles.accountStatLabel}>Puncte</Text>
+            </View>
+            <View style={styles.accountStatItem}>
+              <MaterialCommunityIcons name="cellphone-check" size={24} color="#10B981" />
+              <Text style={styles.accountStatNumber}>{deviceSessions.length}</Text>
+              <Text style={styles.accountStatLabel}>Dispozitive</Text>
+            </View>
+            <View style={styles.accountStatItem}>
+              <MaterialCommunityIcons name="package-variant-closed" size={24} color="#3B82F6" />
+              <Text style={styles.accountStatNumber}>{orders.length}</Text>
+              <Text style={styles.accountStatLabel}>Comenzi</Text>
+            </View>
+          </View>
+
+          {/* Quick Actions */}
+          <View style={styles.accountQuickActions}>
+            <TouchableOpacity style={styles.quickActionButton} onPress={() => setPage('loyalty')}>
+              <MaterialCommunityIcons name="medal" size={20} color="#F59E0B" />
+              <Text style={styles.quickActionText}>Fidelitate</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickActionButton} onPress={() => setPage('settings')}>
+              <MaterialCommunityIcons name="cog" size={20} color="#6B7280" />
+              <Text style={styles.quickActionText}>Setări</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.quickActionButton} onPress={openDeviceSessions}>
+              <MaterialCommunityIcons name="shield-check" size={20} color="#10B981" />
+              <Text style={styles.quickActionText}>Securitate</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Member QR Code Section */}
+        <View style={styles.accountQrSection}>
+          <View style={styles.accountQrHeader}>
+            <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.brandBlue} />
+            <Text style={styles.sectionLabel}>Cod membru</Text>
+          </View>
+
+          {loyaltyQrToken ? (
+            <TouchableOpacity
+              style={styles.accountQrContainer}
+              activeOpacity={0.9}
+              onPress={openLoyaltyQrPreview}
+            >
+              <View style={styles.accountQrPreview}>
+                <QRCodeMatrix value={loyaltyQrToken} size={120} />
+              </View>
+              <View style={styles.accountQrInfo}>
+                <Text style={styles.accountQrTitle}>Codul tău personal</Text>
+                <Text style={styles.accountQrSubtitle}>Scanează la casă pentru beneficii</Text>
+                <View style={styles.accountQrAction}>
+                  <MaterialCommunityIcons name="eye" size={16} color={colors.brandBlue} />
+                  <Text style={styles.accountQrActionText}>Apasă pentru mărire</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ) : hasRequestedProfileQr ? (
+            <View style={styles.accountQrLoading}>
+              <MaterialCommunityIcons name="loading" size={32} color={colors.brandBlue} />
+              <Text style={styles.accountQrLoadingText}>Se generează codul...</Text>
+            </View>
+          ) : profileQrError ? (
+            <View style={styles.accountQrError}>
+              <MaterialCommunityIcons name="barcode-off" size={32} color="#EF4444" />
+              <Text style={styles.accountQrErrorText}>{profileQrError}</Text>
+              <TouchableOpacity style={styles.accountQrRetryButton} onPress={retryLoadProfileQr}>
+                <Text style={styles.accountQrRetryText}>Reîncearcă</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.accountQrGenerateButton} onPress={retryLoadProfileQr}>
+              <MaterialCommunityIcons name="qrcode-plus" size={32} color={colors.brandBlue} />
+              <Text style={styles.accountQrGenerateText}>Generează codul QR</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView
@@ -2188,10 +2394,10 @@ function AppContent() {
                     onPress={() => toggleWishlist(product.id)}
                   >
                     <Text style={styles.bodyText}>
-                      {wishlist.has(product.id) ? 'â˜…' : 'â˜†'} {product.name}
+                      {wishlist.has(product.id) ? '★' : '☆'} {safeText(product.name)}
                     </Text>
                     <Text style={styles.accountListMeta}>
-                      {product.brand} â€¢ {formatPrice(product.priceRon)}
+                      {safeText(product.brand)} · {formatPrice(product.priceRon)}
                     </Text>
                   </TouchableOpacity>
                 ))
@@ -2199,9 +2405,9 @@ function AppContent() {
             </View>
 
             <View style={styles.cardPlain}>
-              <Text style={styles.sectionLabel}>Inbox notificÄƒri</Text>
+              <Text style={styles.sectionLabel}>Inbox notificări</Text>
               {inbox.length === 0 ? (
-                <Text style={styles.bodyMuted}>Nu ai notificÄƒri.</Text>
+                <Text style={styles.bodyMuted}>Nu ai notificări.</Text>
               ) : (
                 inbox.slice(0, 6).map((note) => (
                   <TouchableOpacity
@@ -2214,8 +2420,8 @@ function AppContent() {
                         .catch(() => undefined);
                     }}
                   >
-                    <Text style={styles.bodyText}>{note.title}</Text>
-                    <Text style={styles.bodyMuted}>{note.message}</Text>
+                    <Text style={styles.bodyText}>{safeText(note.title)}</Text>
+                    <Text style={styles.bodyMuted}>{safeText(note.message)}</Text>
                   </TouchableOpacity>
                 ))
               )}
@@ -2227,7 +2433,7 @@ function AppContent() {
           <View style={styles.cardPlain}>
             <Text style={styles.sectionLabel}>Comenzi recente</Text>
             {recentOrders.length === 0 ? (
-              <Text style={styles.bodyMuted}>Nu ai comenzi Ã®ncÄƒ.</Text>
+              <Text style={styles.bodyMuted}>Nu ai comenzi încă.</Text>
             ) : (
               recentOrders.map((order) => {
                 const detail = orderDetailsById[order.id];
@@ -2238,10 +2444,10 @@ function AppContent() {
                 const detailAddressLabel = detail && detail.address ? detail.address.label : null;
                 const timeline =
                   order.status === 'created'
-                    ? ['ComandÄƒ plasatÄƒ']
+                    ? ['Comandă plasată']
                     : order.status === 'processing'
-                      ? ['ComandÄƒ plasatÄƒ', 'ÃŽn procesare']
-                      : ['ComandÄƒ plasatÄƒ', 'ÃŽn procesare', 'ExpediatÄƒ'];
+                      ? ['Comandă plasată', 'În procesare']
+                      : ['Comandă plasată', 'În procesare', 'Expediată'];
 
                 return (
                   <TouchableOpacity
@@ -2251,13 +2457,13 @@ function AppContent() {
                   >
                     <Text style={styles.bodyText}>{order.id}</Text>
                     <Text style={styles.accountListMeta}>
-                      {orderStatusLabels[order.status]} Â· {formatPrice(order.totalRon)}
+                      {orderStatusLabels[order.status]} · {formatPrice(order.totalRon)}
                     </Text>
                     {trackingCode && (
                       <Text style={styles.accountListMeta}>{`Tracking: ${trackingCode}`}</Text>
                     )}
                     {detailAddressLabel && (
-                      <Text style={styles.accountListMeta}>{`AdresÄƒ: ${detailAddressLabel}`}</Text>
+                      <Text style={styles.accountListMeta}>{`Adresă: ${detailAddressLabel}`}</Text>
                     )}
                     <View style={styles.orderTimelineRow}>
                       {timeline.map((step, index) => (
@@ -2291,7 +2497,7 @@ function AppContent() {
                       {address.label}
                     </Text>
                     <Text style={styles.accountListMeta}>
-                      {address.fullName} Â· {address.phone}
+                      {address.fullName} · {address.phone}
                     </Text>
                     <Text style={styles.accountListMeta}>
                       {address.line1}
@@ -2305,7 +2511,7 @@ function AppContent() {
                         disabled={addressBusy || active}
                       >
                         <Text style={styles.secondaryButtonText}>
-                          {active ? 'ImplicitÄƒ' : 'SeteazÄƒ implicitÄƒ'}
+                          {active ? 'Implicită' : 'Setează implicită'}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -2313,14 +2519,14 @@ function AppContent() {
                         onPress={() => openEditAddressEditor(address)}
                         disabled={addressBusy}
                       >
-                        <Text style={styles.secondaryButtonText}>EditeazÄƒ</Text>
+                        <Text style={styles.secondaryButtonText}>Editează</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.secondaryButton}
                         onPress={() => handleDeleteAddress(address.id)}
                         disabled={addressBusy}
                       >
-                        <Text style={styles.secondaryButtonText}>È˜terge</Text>
+                        <Text style={styles.secondaryButtonText}>Șterge</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -2333,7 +2539,7 @@ function AppContent() {
               disabled={addressBusy}
             >
               <Text style={styles.primaryButtonText}>
-                {addressBusy ? 'Se actualizeazÄƒ...' : 'AdaugÄƒ adresÄƒ'}
+                {addressBusy ? 'Se actualizează...' : 'Adaugă adresă'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2341,7 +2547,7 @@ function AppContent() {
 
         {accountSegment === 'privacy' ? (
           <View style={styles.cardPlain}>
-            <Text style={styles.sectionLabel}>SetÄƒri cont È™i confidenÈ›ialitate</Text>
+            <Text style={styles.sectionLabel}>Setări cont și confidențialitate</Text>
             <Text style={styles.bodyMuted}>
               Controalele complete au fost mutate in ecranul dedicat de Setari pentru a evita
               conflictele intre preferintele locale si cele sincronizate server-side.
@@ -2358,7 +2564,7 @@ function AppContent() {
           <View style={styles.cardPlain}>
             <Text style={styles.sectionLabel}>Ghid de onboarding</Text>
             <Text style={styles.bodyMuted}>
-              FinalizeazÄƒ paÈ™ii de mai jos pentru o experienÈ›Äƒ completÄƒ È™i personalizatÄƒ.
+              Finalizează pașii de mai jos pentru o experiență completă și personalizată.
             </Text>
 
             <View style={styles.journeyChecklist}>
@@ -2370,9 +2576,7 @@ function AppContent() {
                   <Text style={styles.journeyItemIcon}>{item.done ? 'âœ“' : 'â—‹'}</Text>
                   <View style={styles.journeyItemMeta}>
                     <Text style={styles.bodyText}>{item.label}</Text>
-                    <Text style={styles.bodyMuted}>
-                      {item.done ? 'Completat' : 'ÃŽn aÈ™teptare'}
-                    </Text>
+                    <Text style={styles.bodyMuted}>{item.done ? 'Completat' : 'În așteptare'}</Text>
                   </View>
                 </View>
               ))}
@@ -2380,7 +2584,7 @@ function AppContent() {
 
             <View style={styles.journeyActions}>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setPage('products')}>
-                <Text style={styles.secondaryButtonText}>ExploreazÄƒ produse</Text>
+                <Text style={styles.secondaryButtonText}>Explorează produse</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setPage('loyalty')}>
                 <Text style={styles.secondaryButtonText}>Vezi fidelitatea</Text>
@@ -2389,10 +2593,10 @@ function AppContent() {
                 style={styles.secondaryButton}
                 onPress={() => setAccountSegment('addresses')}
               >
-                <Text style={styles.secondaryButtonText}>ConfigureazÄƒ adrese</Text>
+                <Text style={styles.secondaryButtonText}>Configurează adrese</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={() => setPage('settings')}>
-                <Text style={styles.secondaryButtonText}>SetÄƒri confidenÈ›ialitate</Text>
+                <Text style={styles.secondaryButtonText}>Setări confidențialitate</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2403,19 +2607,39 @@ function AppContent() {
 
   const handleCheckout = () => {
     if (!accountUser) {
-      setCatalogError('AutentificÄƒ-te Ã®nainte de checkout.');
+      setCatalogError('Autentifică-te înainte de checkout.');
       goToLogin();
       return;
     }
 
-    if (!selectedAddressId) {
-      setCatalogError('SelecteazÄƒ sau adaugÄƒ o adresÄƒ de livrare Ã®nainte de checkout.');
-      showToast('AdaugÄƒ adresa de livrare Ã®nainte de finalizarea comenzii.', 'error');
+    if (!selectedAddressId && !checkoutAddressDraft) {
+      setCatalogError('Adaugă o adresă de livrare pentru checkout.');
+      showToast('Trebuie să adaugi o adresă de livrare.', 'error');
       return;
     }
 
-    setCheckoutBusy(true);
+    if (checkoutAddressDraft) {
+      const addr = checkoutAddressDraft;
+      if (
+        !addr.fullName?.trim() ||
+        !addr.phone?.trim() ||
+        !addr.line1?.trim() ||
+        !addr.city?.trim() ||
+        !addr.county?.trim() ||
+        !addr.postalCode?.trim()
+      ) {
+        setCatalogError('Completează toate câmpurile pentru adresă.');
+        showToast('Completează toate câmpurile adresei.', 'error');
+        return;
+      }
+    }
 
+    // Show checkout page first for order summary
+    setPage('checkout');
+  };
+
+  const processCheckout = () => {
+    setCheckoutBusy(true);
     void validateCart()
       .then((validation) => {
         if (!validation.ok) {
@@ -2423,16 +2647,20 @@ function AppContent() {
           throw new Error(
             firstIssue?.messageRo ??
               firstIssue?.message ??
-              'CoÈ™ul trebuie actualizat Ã®nainte de checkout.',
+              'Coșul trebuie actualizat înainte de checkout.',
           );
         }
 
         setCart(validation.lines);
-        return checkoutCart({ addressId: selectedAddressId });
+        return checkoutCart(
+          selectedAddressId
+            ? { addressId: selectedAddressId }
+            : { address: checkoutAddressDraft ?? undefined },
+        );
       })
       .then((payload) => {
-        setCatalogMeta(`Checkout iniÈ›iat: ${payload.orderId}`);
-        showToast(`ComandÄƒ plasatÄƒ: ${formatPrice(payload.totalRon)}`);
+        setCatalogMeta(`Checkout inițiat: ${payload.orderId}`);
+        showToast(`Comandă plasată: ${formatPrice(payload.totalRon)}`);
         return Promise.all([
           fetchOrders(),
           fetchCart(),
@@ -2463,13 +2691,13 @@ function AppContent() {
     ).slice(0, 5);
     uniqueIds.forEach((id) => addToCart(id));
     if (uniqueIds.length > 0) {
-      showToast(`Bundle adÄƒugat Ã®n coÈ™ (${uniqueIds.length} produse).`);
+      showToast(`Bundle adăugat în coș (${uniqueIds.length} produse).`);
     }
   };
 
   const toggleBackInStockAlert = (productId: string) => {
     if (!accountUser) {
-      showToast('AutentificÄƒ-te pentru alerte de stoc.', 'error');
+      showToast('Autentifică-te pentru alerte de stoc.', 'error');
       goToLogin('productDetails');
       return;
     }
@@ -2489,8 +2717,8 @@ function AppContent() {
       .then(() => {
         showToast(
           currentlyActive
-            ? 'Alerta de stoc a fost dezactivatÄƒ.'
-            : 'Te anunÈ›Äƒm cÃ¢nd revine Ã®n stoc.',
+            ? 'Alerta de stoc a fost dezactivată.'
+            : 'Te anunțăm când revine în stoc.',
         );
       })
       .catch((error) => {
@@ -2576,12 +2804,12 @@ function AppContent() {
         nextDraft.countryCode,
       ].some((value) => value.length === 0)
     ) {
-      setAddressFormError('CompleteazÄƒ toate cÃ¢mpurile obligatorii.');
+      setAddressFormError('Completează toate câmpurile obligatorii.');
       return;
     }
 
     if (nextDraft.phone.replace(/\D/g, '').length < 9) {
-      setAddressFormError('NumÄƒrul de telefon este invalid.');
+      setAddressFormError('Numărul de telefon este invalid.');
       return;
     }
 
@@ -2599,9 +2827,7 @@ function AppContent() {
         setSelectedAddressId(payload.selectedAddressId);
         setAddressEditorVisible(false);
         setAddressEditorId(null);
-        showToast(
-          editingAddressId ? 'Adresa a fost actualizatÄƒ.' : 'AdresÄƒ de livrare adÄƒugatÄƒ.',
-        );
+        showToast(editingAddressId ? 'Adresa a fost actualizată.' : 'Adresă de livrare adăugată.');
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : 'Nu am putut salva adresa.';
@@ -2619,7 +2845,7 @@ function AppContent() {
     setAddressBusy(true);
     void selectAddress(addressId)
       .then(() => {
-        showToast('Adresa de livrare a fost actualizatÄƒ.');
+        showToast('Adresa de livrare a fost actualizată.');
       })
       .catch((error) => {
         setSelectedAddressId(previousAddressId);
@@ -2637,10 +2863,10 @@ function AppContent() {
       .then((payload) => {
         setAddresses(payload.addresses);
         setSelectedAddressId(payload.selectedAddressId);
-        showToast('AdresÄƒ eliminatÄƒ.');
+        showToast('Adresă eliminată.');
       })
       .catch((error) => {
-        const message = error instanceof Error ? error.message : 'Nu am putut È™terge adresa.';
+        const message = error instanceof Error ? error.message : 'Nu am putut șterge adresa.';
         setCatalogError(message);
         showToast(message, 'error');
       })
@@ -2649,13 +2875,13 @@ function AppContent() {
 
   const handleRedeemVoucher = () => {
     if (!accountUser) {
-      setCatalogError('AutentificÄƒ-te pentru a genera voucherul de fidelitate.');
+      setCatalogError('Autentifică-te pentru a genera voucherul de fidelitate.');
       goToLogin('loyalty');
       return;
     }
 
     if (loyalty.points < loyaltyRedeemPoints) {
-      setCatalogError('Nu ai suficiente puncte pentru valoarea selectatÄƒ.');
+      setCatalogError('Nu ai suficiente puncte pentru valoarea selectată.');
       return;
     }
 
@@ -2665,7 +2891,7 @@ function AppContent() {
         setLoyalty(payload.summary);
         setVoucherQrToken(payload.voucher.qrToken ?? null);
         setCatalogMeta(`Voucher generat: ${payload.voucher.code}`);
-        showToast('Voucherul a fost generat È™i are QR dedicat pentru scanare Ã®n magazin.');
+        showToast('Voucherul a fost generat și are QR dedicat pentru scanare în magazin.');
         return fetchInbox();
       })
       .then((items) => setInbox(items))
@@ -2677,7 +2903,7 @@ function AppContent() {
 
   const handleRefreshLoyalty = () => {
     if (!accountUser) {
-      setCatalogError('AutentificÄƒ-te pentru a actualiza datele de fidelitate.');
+      setCatalogError('Autentifică-te pentru a actualiza datele de fidelitate.');
       goToLogin('loyalty');
       return;
     }
@@ -2695,7 +2921,7 @@ function AppContent() {
       })
       .catch((error) =>
         setCatalogError(
-          error instanceof Error ? error.message : 'Actualizarea fidelitÄƒÈ›ii a eÈ™uat momentan.',
+          error instanceof Error ? error.message : 'Actualizarea fidelității a eșuat momentan.',
         ),
       )
       .finally(() => setLoyaltyRefreshing(false));
@@ -2703,18 +2929,18 @@ function AppContent() {
 
   const handleShareVoucher = () => {
     if (!loyalty.lastVoucher?.code || !voucherQrToken) {
-      setCatalogError('Nu existÄƒ voucher activ cu QR pentru partajare.');
+      setCatalogError('Nu există voucher activ cu QR pentru partajare.');
       return;
     }
 
     void Share.share({
-      message: `Voucher Dacus: ${loyalty.lastVoucher.code} â€¢ ${formatPrice(loyalty.lastVoucher.valueRon)} â€¢ Cod scanare: ${voucherQrToken}`,
-    }).catch(() => setCatalogError('Partajarea voucherului nu a reuÈ™it momentan.'));
+      message: `Voucher Dacus: ${loyalty.lastVoucher.code} · ${formatPrice(loyalty.lastVoucher.valueRon)} · Cod scanare: ${voucherQrToken}`,
+    }).catch(() => setCatalogError('Partajarea voucherului nu a reușit momentan.'));
   };
 
   const openVoucherQrPreview = () => {
     if (!voucherQrToken) {
-      setCatalogError('Nu existÄƒ QR de voucher activ.');
+      setCatalogError('Nu există QR de voucher activ.');
       return;
     }
     setQrModalToken(voucherQrToken);
@@ -2722,7 +2948,7 @@ function AppContent() {
 
   const openLoyaltyQrPreview = () => {
     if (!loyaltyQrToken) {
-      setCatalogError('Nu existÄƒ QR de fidelitate activ.');
+      setCatalogError('Nu există QR de fidelitate activ.');
       return;
     }
     setQrModalToken(loyaltyQrToken);
@@ -2730,13 +2956,13 @@ function AppContent() {
 
   const handleShareQrToken = () => {
     if (!loyaltyQrToken) {
-      setCatalogError('Nu existÄƒ cod de membru activ pentru partajare.');
+      setCatalogError('Nu există cod de membru activ pentru partajare.');
       return;
     }
 
     void Share.share({
       message: `Cod de membru fidelitate Dacus: ${loyaltyQrToken}`,
-    }).catch(() => setCatalogError('Partajarea codului de membru nu a reuÈ™it momentan.'));
+    }).catch(() => setCatalogError('Partajarea codului de membru nu a reușit momentan.'));
   };
 
   const toggleWishlist = (productId: string) => {
@@ -2765,7 +2991,7 @@ function AppContent() {
   const runLogin = () => {
     const email = authEmail.trim();
     if (!email || !authPassword.trim()) {
-      setAuthError('CompleteazÄƒ email È™i parolÄƒ.');
+      setAuthError('Completează email și parolă.');
       return;
     }
 
@@ -2831,7 +3057,7 @@ function AppContent() {
           );
           setAuthRedirectPage(null);
           setShouldPromptBiometricAfterAuth(true);
-          showToast('Autentificare reuÈ™itÄƒ. Bine ai revenit!');
+          showToast('Autentificare reușită. Bine ai revenit!');
           void registerDeviceForNotifications(`ios-${Date.now()}`, 'ios').catch(() => undefined);
         },
       )
@@ -2839,7 +3065,7 @@ function AppContent() {
         const message =
           error instanceof Error
             ? error.message
-            : 'Autentificare eÈ™uatÄƒ. VerificÄƒ datele È™i Ã®ncearcÄƒ din nou.';
+            : 'Autentificare eșuată. Verifică datele și încearcă din nou.';
         setAuthError(message);
         showToast(message, 'error');
       })
@@ -2881,7 +3107,7 @@ function AppContent() {
     const name = authName.trim();
 
     if (!email || !authPassword.trim() || !name) {
-      setAuthError('CompleteazÄƒ toate cÃ¢mpurile pentru Ã®nregistrare.');
+      setAuthError('Completează toate câmpurile pentru înregistrare.');
       return;
     }
 
@@ -2891,7 +3117,7 @@ function AppContent() {
     }
 
     if (authPassword.length < 6) {
-      setAuthError('Parola trebuie sÄƒ aibÄƒ minimum 6 caractere.');
+      setAuthError('Parola trebuie să aibă minimum 6 caractere.');
       return;
     }
 
@@ -2960,7 +3186,7 @@ function AppContent() {
         const message =
           error instanceof Error
             ? error.message
-            : 'ÃŽnregistrare eÈ™uatÄƒ. VerificÄƒ datele È™i Ã®ncearcÄƒ din nou.';
+            : 'Înregistrare eșuată. Verifică datele și încearcă din nou.';
         setAuthError(message);
         showToast(message, 'error');
       })
@@ -3016,8 +3242,7 @@ function AppContent() {
       setProductsLoadingMore(true);
       const requestPerPage =
         searchQuery.trim().length > 0 ? PRODUCTS_PAGE_SIZE * 2 : PRODUCTS_PAGE_SIZE;
-      const effectiveCategoryId =
-        searchQuery.trim().length === 0 ? selectedCategoryId : facetCategoryId || undefined;
+      const effectiveCategoryId = searchQuery.trim().length === 0 ? selectedCategoryId : undefined;
 
       const priceRange = mapPriceFilter(priceFilter);
 
@@ -3052,7 +3277,7 @@ function AppContent() {
         })
         .catch((error) => {
           setCatalogError(
-            error instanceof Error ? error.message : 'Nu s-au putut Ã®ncÄƒrca mai multe produse.',
+            error instanceof Error ? error.message : 'Nu s-au putut încărca mai multe produse.',
           );
         })
         .finally(() => setProductsLoadingMore(false));
@@ -3075,13 +3300,13 @@ function AppContent() {
     if (filteredProducts.length === 0) {
       return (
         <View style={styles.emptyStateCard}>
-          <Text style={styles.emptyStateTitle}>Nu existÄƒ produse pentru filtrarea curentÄƒ</Text>
+          <Text style={styles.emptyStateTitle}>Nu există produse pentru filtrarea curentă</Text>
           <Text style={styles.emptyText}>
-            ÃŽncearcÄƒ sÄƒ resetezi filtrele sau sÄƒ alegi o categorie diferitÄƒ.
+            Încearcă să resetezi filtrele sau să alegi o categorie diferită.
           </Text>
           <View style={styles.emptyStateActions}>
             <TouchableOpacity style={styles.secondaryButton} onPress={resetFilters}>
-              <Text style={styles.secondaryButtonText}>ReseteazÄƒ filtrele</Text>
+              <Text style={styles.secondaryButtonText}>Resetează filtrele</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3125,7 +3350,7 @@ function AppContent() {
           productsHasMoreForView ? (
             <TouchableOpacity style={styles.loadMoreButton} onPress={loadMoreProducts}>
               <Text style={styles.loadMoreButtonText}>
-                {productsLoadingMore ? 'Se Ã®ncarcÄƒ...' : 'AfiÈ™eazÄƒ mai multe produse'}
+                {productsLoadingMore ? 'Se încarcă...' : 'Afișează mai multe produse'}
               </Text>
             </TouchableOpacity>
           ) : null
@@ -3221,15 +3446,41 @@ function AppContent() {
       );
     }
 
+    if (page === 'checkout') {
+      return (
+        <CheckoutScreen
+          styles={styles}
+          isLoading={false}
+          isProcessing={checkoutBusy}
+          cartItems={cartItems}
+          cartTotal={cartTotal}
+          selectedAddress={selectedAddress}
+          addressDraft={checkoutAddressDraft}
+          onGoBack={() => setPage('cart')}
+          onConfirmCheckout={processCheckout}
+          onOpenExternalCheckout={(url) => {
+            Alert.alert(
+              'Redirecționare la plată',
+              'Vei fi redirecționat către pagina de plată Shopify. După plată, vei primi un email de confirmare.',
+              [
+                { text: 'Anulează', style: 'cancel' },
+                { text: 'Continuă', onPress: () => Linking.openURL(url).catch(() => undefined) },
+              ],
+            );
+          }}
+        />
+      );
+    }
+
     if (page === 'products') {
       return (
         <ProductsScreen
           styles={styles}
-          selectedCategoryName={selectedCategory?.name ?? 'Produse'}
-          searchQuery={searchQuery}
+          selectedCategoryName={safeText(selectedCategory?.name) ?? 'Produse'}
+          searchQuery={safeText(searchQuery) ?? ''}
           productsTotalForView={productsTotalForView}
           filteredProductsCount={filteredProducts.length}
-          sortLabel={sortLabelMap[sortOption]}
+          sortLabel={safeText(sortLabelMap[sortOption]) ?? ''}
           sortOption={sortOption}
           onlyFavorites={onlyFavorites}
           filterCount={filterCount}
@@ -3261,14 +3512,14 @@ function AppContent() {
                   style={styles.secondaryButton}
                   onPress={saveCurrentFiltersAsPreset}
                 >
-                  <Text style={styles.secondaryButtonText}>SalveazÄƒ preset</Text>
+                  <Text style={styles.secondaryButtonText}>Salvează preset</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.secondaryButton}
                   onPress={() => setCompareMode((prev) => !prev)}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    {compareMode ? 'IeÈ™i din comparare' : 'Compare mode'}
+                    {compareMode ? 'Ieși din comparare' : 'Compare mode'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -3291,7 +3542,7 @@ function AppContent() {
                         style={styles.filterPresetDelete}
                         onPress={() => deleteFilterPreset(preset.id)}
                       >
-                        <Text style={styles.filterPresetDeleteText}>Ã—</Text>
+                        <Text style={styles.filterPresetDeleteText}>×</Text>
                       </TouchableOpacity>
                     </View>
                   ))}
@@ -3315,36 +3566,35 @@ function AppContent() {
                       onPress={clearCompareProducts}
                       disabled={compareProducts.length === 0}
                     >
-                      <Text style={styles.compareClearButtonText}>GoleÈ™te</Text>
+                      <Text style={styles.compareClearButtonText}>Golește</Text>
                     </TouchableOpacity>
                   </View>
 
                   {compareProducts.length === 0 ? (
                     <Text style={styles.bodyMuted}>
-                      SelecteazÄƒ produse din lista de mai jos pentru comparaÈ›ie.
+                      Selectează produse din lista de mai jos pentru comparație.
                     </Text>
                   ) : (
                     compareProducts.map((product) => (
                       <View key={product.id} style={styles.compareRow}>
                         <View style={styles.compareInfo}>
-                          <Text style={styles.bodyText}>{product.name}</Text>
+                          <Text style={styles.bodyText}>{safeText(product.name)}</Text>
                           <Text style={styles.bodyMuted}>
-                            {product.brand} â€¢ {formatPrice(product.priceRon)} â€¢{' '}
-                            {product.stockLabel}
+                            {safeText(product.brand)} · {formatPrice(product.priceRon)} ·{' '}
+                            {safeText(product.stockLabel)}
                           </Text>
                         </View>
                         <TouchableOpacity
                           style={styles.secondaryButton}
                           onPress={() => toggleCompareProduct(product.id)}
                         >
-                          <Text style={styles.secondaryButtonText}>EliminÄƒ</Text>
+                          <Text style={styles.secondaryButtonText}>Elimină</Text>
                         </TouchableOpacity>
                       </View>
                     ))
                   )}
                   <Text style={styles.bodyMuted}>
-                    Pentru selecÈ›ie rapidÄƒ foloseÈ™te badge-ul â€žComparÄƒâ€ din cardurile
-                    produselor.
+                    Pentru selecție rapidă folosește badge-ul „Compară” din cardurile produselor.
                   </Text>
                 </View>
               ) : null}
@@ -3414,22 +3664,37 @@ function AppContent() {
                 openCreateAddressEditor();
               }
             }}
+            checkoutAddressDraft={checkoutAddressDraft}
+            onUpdateCheckoutAddressField={(field, value) => {
+              const current = checkoutAddressDraft ?? {
+                label: 'Livrare',
+                fullName: '',
+                phone: '',
+                line1: '',
+                line2: '',
+                city: '',
+                county: '',
+                postalCode: '',
+                countryCode: 'RO',
+              };
+              setCheckoutAddressDraft({ ...current, [field]: value });
+            }}
             hasImageUrl={hasImageUrl}
           />
 
           <View style={styles.cardPlain}>
-            <Text style={styles.sectionLabel}>Liste salvate din coÈ™</Text>
+            <Text style={styles.sectionLabel}>Liste salvate din coș</Text>
             <TouchableOpacity style={styles.secondaryButton} onPress={saveCurrentCartAsList}>
-              <Text style={styles.secondaryButtonText}>SalveazÄƒ coÈ™ul curent</Text>
+              <Text style={styles.secondaryButtonText}>Salvează coșul curent</Text>
             </TouchableOpacity>
             {savedCartLists.length === 0 ? (
-              <Text style={styles.bodyMuted}>Nu existÄƒ liste salvate Ã®ncÄƒ.</Text>
+              <Text style={styles.bodyMuted}>Nu există liste salvate încă.</Text>
             ) : (
               savedCartLists.slice(0, 5).map((list) => (
                 <View key={list.id} style={styles.stackSmall}>
                   <Text style={styles.bodyText}>{list.name}</Text>
                   <Text style={styles.bodyMuted}>
-                    {new Date(list.createdAt).toLocaleDateString('ro-RO')} â€¢ {list.lines.length}{' '}
+                    {new Date(list.createdAt).toLocaleDateString('ro-RO')} · {list.lines.length}{' '}
                     produse
                   </Text>
                   <View style={styles.quickGrid}>
@@ -3437,13 +3702,13 @@ function AppContent() {
                       style={styles.secondaryButton}
                       onPress={() => restoreCartList(list.id)}
                     >
-                      <Text style={styles.secondaryButtonText}>RestaureazÄƒ</Text>
+                      <Text style={styles.secondaryButtonText}>Restaurează</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.secondaryButton}
                       onPress={() => removeSavedCartList(list.id)}
                     >
-                      <Text style={styles.secondaryButtonText}>È˜terge</Text>
+                      <Text style={styles.secondaryButtonText}>Șterge</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -3466,11 +3731,11 @@ function AppContent() {
           loyaltyRedeemPoints={loyaltyRedeemPoints}
           voucherValueRon={voucherValueRon}
           loyaltyTiers={loyaltyTiers}
-          tierBenefitText={loyaltyTierBenefits[loyalty.tier]}
+          tierBenefitText={safeText(loyaltyTierBenefits[loyalty.tier]) ?? ''}
           voucherQrToken={voucherQrToken}
           loyaltyQrToken={loyaltyQrToken}
           loyaltyQrLoading={hasRequestedProfileQr && !loyaltyQrToken && !profileQrError}
-          loyaltyQrError={profileQrError}
+          loyaltyQrError={safeText(profileQrError) ?? null}
           onRefreshLoyalty={handleRefreshLoyalty}
           onRetryLoyaltyQr={retryLoadProfileQr}
           onSetRedeemPoints={setLoyaltyRedeemPoints}
@@ -3499,7 +3764,7 @@ function AppContent() {
           styles={styles}
           isLoading={settingsLoading}
           isAuthenticated={!!accountUser}
-          accountEmail={accountUser?.email ?? '-'}
+          accountEmail={safeText(accountUser?.email) ?? '-'}
           settings={effectiveAccountSettings}
           biometricEnabled={accountSettings.biometricLoginEnabled}
           onUpdateSettings={updateUnifiedAccountSettings}
@@ -3546,8 +3811,8 @@ function AppContent() {
           {isStandaloneAuthPage(page) ? (
             <>
               <TouchableOpacity style={styles.backAuthButton} onPress={() => setPage('home')}>
-                <MaterialCommunityIcons name="arrow-left" size={18} color={colors.brandBlack} />
-                <Text style={styles.backAuthButtonText}>ÃŽnapoi</Text>
+                <Ionicons name="arrow-back" size={18} color={colors.brandBlack} />
+                <Text style={styles.backAuthButtonText}>Înapoi</Text>
               </TouchableOpacity>
               <Text style={styles.authHeaderTitle}>
                 {authScreenTitles[page as 'login' | 'register']}
@@ -3558,8 +3823,8 @@ function AppContent() {
             <>
               <Image source={dacusLogo} style={styles.logoImage} resizeMode="contain" />
               <TouchableOpacity style={styles.cartButton} onPress={() => setPage('cart')}>
-                <MaterialCommunityIcons name="basket" size={16} color="#FFFFFF" />
-                <Text style={styles.cartButtonText}>COÈ˜ {cartCount}</Text>
+                <Ionicons name="cart-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.cartButtonText}>COȘ {cartCount}</Text>
               </TouchableOpacity>
             </>
           )}
@@ -3578,16 +3843,27 @@ function AppContent() {
                 onSubmit={handleSearchSubmit}
                 onSelectSuggestion={handleSearchSubmit}
                 suggestions={searchSuggestions}
+                productResults={searchPreviewResults.map((item) => ({
+                  id: item.id,
+                  name: safeText(item.name) ?? item.name,
+                  brand: safeText(item.brand) ?? item.brand,
+                  priceRon: item.priceRon,
+                  stockLabel: safeText(item.stockLabel) ?? undefined,
+                  imageUrl: item.imageUrl,
+                  thumbnailUrl: item.thumbnailUrl,
+                }))}
                 recentSearches={searchHistory}
                 savedSearches={savedSearches}
                 recentFilters={recentFilterSnapshots.map((item) => ({
                   id: item.id,
-                  label: item.label,
+                  label: safeText(item.label) ?? item.label,
                 }))}
                 trendingSearches={trendingSearches}
+                loading={searchPreviewLoading}
                 onSaveSearch={saveSearchQuery}
                 onSelectRecentFilter={applyRecentFilterSnapshot}
-                placeholder="CautÄƒ produse, branduri, cod, SKU"
+                onSelectProduct={handleSearchProductSelect}
+                placeholder="Caută produse, branduri, cod, SKU"
               />
             </View>
           </>
@@ -3596,9 +3872,19 @@ function AppContent() {
 
       {undoRemoval ? (
         <View style={styles.undoBar}>
-          <Text style={styles.undoBarText}>{`${undoRemoval.productName} a fost eliminat.`}</Text>
-          <TouchableOpacity style={styles.undoButton} onPress={undoRemoveCartItem}>
-            <Text style={styles.undoButtonText}>AnuleazÄƒ</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+            <Ionicons name="trash-outline" size={16} color={colors.brandRed} />
+            <Text style={styles.undoBarText}>{`${undoRemoval.productName} a fost eliminat.`}</Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.undoButton,
+              { flexDirection: 'row', alignItems: 'center', gap: spacing.xxs },
+            ]}
+            onPress={undoRemoveCartItem}
+          >
+            <Ionicons name="arrow-undo-outline" size={14} color={colors.brandRed} />
+            <Text style={styles.undoButtonText}>Anulează</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -3610,7 +3896,9 @@ function AppContent() {
         scrollEventThrottle={16}
         contentContainerStyle={styles.content}
       >
-        {renderPage()}
+        <Animated.View style={[styles.pageContainer, { opacity: pageFadeAnim }]}>
+          {renderPage()}
+        </Animated.View>
       </ScrollView>
 
       {cartCount > 0 && page !== 'cart' && !isStandaloneAuthPage(page) ? (
@@ -3620,12 +3908,12 @@ function AppContent() {
           activeOpacity={0.93}
         >
           <View>
-            <Text style={styles.floatingCartTitle}>Ai {cartCount} produse Ã®n coÈ™</Text>
+            <Text style={styles.floatingCartTitle}>Ai {cartCount} produse în coș</Text>
             <Text style={styles.floatingCartSub}>{formatPrice(cartTotal)}</Text>
           </View>
           <View style={styles.floatingCartActionWrap}>
-            <MaterialCommunityIcons name="cart-check" size={16} color={colors.brandAmber} />
-            <Text style={styles.floatingCartAction}>Vezi coÈ™</Text>
+            <Ionicons name="cart" size={16} color={colors.brandAmber} />
+            <Text style={styles.floatingCartAction}>Vezi coș</Text>
           </View>
         </TouchableOpacity>
       ) : null}
@@ -3692,7 +3980,7 @@ function AppContent() {
         >
           <TouchableOpacity style={styles.qrModalCard} activeOpacity={1} onPress={() => undefined}>
             {qrModalToken ? <QRCodeMatrix value={qrModalToken} size={290} /> : null}
-            <Text style={styles.qrModalHint}>ScaneazÄƒ acest QR la casÄƒ pentru validare.</Text>
+            <Text style={styles.qrModalHint}>Scanează acest QR la casă pentru validare.</Text>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -3710,13 +3998,13 @@ function AppContent() {
             onPress={() => undefined}
           >
             <Text style={styles.sectionLabel}>
-              {addressEditorId ? 'EditeazÄƒ adresa' : 'AdaugÄƒ adresÄƒ nouÄƒ'}
+              {addressEditorId ? 'Editează adresa' : 'Adaugă adresă nouă'}
             </Text>
             <ScrollView style={styles.addressFormScroll} contentContainerStyle={styles.stackSmall}>
-              <Text style={styles.addressFieldLabel}>EtichetÄƒ *</Text>
+              <Text style={styles.addressFieldLabel}>Etichetă *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="AcasÄƒ, Birou..."
+                placeholder="Acasă, Birou..."
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.label}
                 onChangeText={(value) => updateAddressDraftValue('label', value)}
@@ -3725,7 +4013,7 @@ function AppContent() {
               <Text style={styles.addressFieldLabel}>Nume complet *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="Nume È™i prenume"
+                placeholder="Nume și prenume"
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.fullName}
                 onChangeText={(value) => updateAddressDraftValue('fullName', value)}
@@ -3741,53 +4029,53 @@ function AppContent() {
                 onChangeText={(value) => updateAddressDraftValue('phone', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>AdresÄƒ (linia 1) *</Text>
+              <Text style={styles.addressFieldLabel}>Adresă (linia 1) *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="StradÄƒ, numÄƒr"
+                placeholder="Stradă, număr"
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.line1}
                 onChangeText={(value) => updateAddressDraftValue('line1', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>AdresÄƒ (linia 2)</Text>
+              <Text style={styles.addressFieldLabel}>Adresă (linia 2)</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="Bloc, scarÄƒ, apartament"
+                placeholder="Bloc, scară, apartament"
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.line2 ?? ''}
                 onChangeText={(value) => updateAddressDraftValue('line2', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>OraÈ™ *</Text>
+              <Text style={styles.addressFieldLabel}>Oraș *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="OraÈ™"
+                placeholder="Oraș"
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.city}
                 onChangeText={(value) => updateAddressDraftValue('city', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>JudeÈ› *</Text>
+              <Text style={styles.addressFieldLabel}>Județ *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="JudeÈ›"
+                placeholder="Județ"
                 placeholderTextColor={colors.textSecondary}
                 value={addressDraft.county}
                 onChangeText={(value) => updateAddressDraftValue('county', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>Cod poÈ™tal *</Text>
+              <Text style={styles.addressFieldLabel}>Cod poștal *</Text>
               <TextInput
                 style={styles.addressInput}
-                placeholder="Cod poÈ™tal"
+                placeholder="Cod poștal"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="number-pad"
                 value={addressDraft.postalCode}
                 onChangeText={(value) => updateAddressDraftValue('postalCode', value)}
               />
 
-              <Text style={styles.addressFieldLabel}>ÈšarÄƒ (cod) *</Text>
+              <Text style={styles.addressFieldLabel}>Țară (cod) *</Text>
               <TextInput
                 style={styles.addressInput}
                 placeholder="RO"
@@ -3802,7 +4090,7 @@ function AppContent() {
 
               <Text
                 style={styles.addressFieldLabel}
-              >{`Calitate adresÄƒ: ${addressQualityScore}/100`}</Text>
+              >{`Calitate adresă: ${addressQualityScore}/100`}</Text>
               <View style={styles.addressQualityTrack}>
                 <View style={[styles.addressQualityFill, { width: `${addressQualityScore}%` }]} />
               </View>
@@ -3818,7 +4106,7 @@ function AppContent() {
                 onPress={closeAddressEditor}
                 disabled={addressBusy}
               >
-                <Text style={styles.secondaryButtonText}>RenunÈ›Äƒ</Text>
+                <Text style={styles.secondaryButtonText}>Renunță</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.primaryButton}
@@ -3826,7 +4114,7 @@ function AppContent() {
                 disabled={addressBusy}
               >
                 <Text style={styles.primaryButtonText}>
-                  {addressBusy ? 'Se salveazÄƒ...' : 'SalveazÄƒ adresa'}
+                  {addressBusy ? 'Se salvează...' : 'Salvează adresa'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -3836,7 +4124,7 @@ function AppContent() {
 
       {showBackTop ? (
         <TouchableOpacity style={styles.backTopButton} onPress={backToTop} activeOpacity={0.9}>
-          <MaterialCommunityIcons name="arrow-up" size={18} style={styles.backTopButtonText} />
+          <Ionicons name="arrow-up" size={18} color={colors.brandBlack} />
         </TouchableOpacity>
       ) : null}
 
@@ -3871,14 +4159,14 @@ function AppContent() {
           <TouchableOpacity style={styles.qrModalCard} activeOpacity={1} onPress={() => undefined}>
             <Text style={styles.sectionLabel}>Sesiuni dispozitiv</Text>
             {deviceSessions.length === 0 ? (
-              <Text style={styles.bodyMuted}>Nu existÄƒ sesiuni active.</Text>
+              <Text style={styles.bodyMuted}>Nu există sesiuni active.</Text>
             ) : (
               deviceSessions.map((session) => (
                 <View key={session.id} style={styles.compareRow}>
                   <View style={styles.compareInfo}>
                     <Text
                       style={styles.bodyText}
-                    >{`${String(session.platform ?? '').toUpperCase()} â€¢ ${session.deviceId}`}</Text>
+                    >{`${String(session.platform ?? '').toUpperCase()} · ${session.deviceId}`}</Text>
                     <Text style={styles.bodyMuted}>
                       Ultima activitate: {new Date(session.lastSeenAt).toLocaleString('ro-RO')}
                     </Text>
@@ -3889,7 +4177,7 @@ function AppContent() {
                     disabled={session.current === true}
                   >
                     <Text style={styles.secondaryButtonText}>
-                      {session.current ? 'Curent' : 'RevocÄƒ'}
+                      {session.current ? 'Curent' : 'Revocă'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -3913,14 +4201,13 @@ function AppContent() {
           <TouchableOpacity style={styles.qrModalCard} activeOpacity={1} onPress={() => undefined}>
             <Text style={styles.sectionLabel}>Activezi login biometric?</Text>
             <Text style={styles.bodyMuted}>
-              Pentru urmÄƒtoarele autentificÄƒri poÈ›i folosi Face ID / amprentÄƒ pe acest
-              dispozitiv.
+              Pentru următoarele autentificări poți folosi Face ID / amprentă pe acest dispozitiv.
             </Text>
             <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => handleBiometricPromptChoice(true)}
             >
-              <Text style={styles.primaryButtonText}>Da, activeazÄƒ</Text>
+              <Text style={styles.primaryButtonText}>Da, activează</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
@@ -3933,7 +4220,7 @@ function AppContent() {
       </Modal>
 
       {isStandaloneAuthPage(page) ? null : (
-        <NavigationBar currentPage={page} onNavigate={setPage} cartCount={cartCount} />
+        <NavigationBar currentPage={page} onNavigate={smoothNavigate} cartCount={cartCount} />
       )}
     </SafeAreaView>
   );
@@ -4003,9 +4290,9 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.cardPlain, { margin: spacing.lg }]}>
-          <Text style={styles.sectionLabel}>Se porneÈ™te aplicaÈ›ia</Text>
+          <Text style={styles.sectionLabel}>Se pornește aplicația</Text>
           <Text style={styles.bodyMuted}>
-            IniÈ›ializÄƒm modulele necesare. DacÄƒ acest mesaj persistÄƒ, reporneÈ™te aplicaÈ›ia.
+            Inițializăm modulele necesare. Dacă acest mesaj persistă, repornește aplicația.
           </Text>
         </View>
       </SafeAreaView>
@@ -4016,10 +4303,10 @@ export default function App() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={[styles.cardPlain, { margin: spacing.lg }]}>
-          <Text style={styles.sectionLabel}>AplicaÈ›ia a Ã®ntÃ¢mpinat o eroare criticÄƒ</Text>
+          <Text style={styles.sectionLabel}>Aplicația a întâmpinat o eroare critică</Text>
           <Text style={styles.bodyMuted}>
-            Te rugÄƒm sÄƒ Ã®nchizi È™i sÄƒ redeschizi aplicaÈ›ia. DacÄƒ problema persistÄƒ,
-            reinstaleazÄƒ aplicaÈ›ia.
+            Te rugăm să închizi și să redeschizi aplicația. Dacă problema persistă, reinstalează
+            aplicația.
           </Text>
           <Text style={styles.bodyMuted}>{fatalBootError.message}</Text>
         </View>
@@ -4057,16 +4344,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
+    zIndex: 100,
   },
   headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    minHeight: 72,
+    gap: spacing.sm,
   },
-  logoImage: { width: 88, height: 30 },
+  logoImage: { width: 153, height: 53, marginRight: 'auto' },
   searchWrap: {
     position: 'relative',
     justifyContent: 'center',
+    zIndex: 101,
   },
   searchInput: {
     height: 42,
@@ -4102,9 +4393,9 @@ const styles = StyleSheet.create({
   },
   cartButtonText: { color: '#FFFFFF', fontSize: typography.caption, fontWeight: '800' },
   scroll: { flex: 1, backgroundColor: colors.surfaceAlt },
-  content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: 140 },
+  content: { padding: spacing.md, gap: spacing.md, paddingBottom: 140 },
   stackLarge: { gap: spacing.lg },
-  stackSmall: { gap: spacing.sm },
+  stackSmall: { gap: spacing.sm, flex: 1, minWidth: 0 },
   pageHeading: {
     fontSize: typography.h2,
     fontWeight: '900',
@@ -4122,73 +4413,42 @@ const styles = StyleSheet.create({
   emptyText: { color: colors.textSecondary, fontSize: typography.body },
   errorText: { color: colors.brandRed, fontSize: typography.caption },
   homeHeroShell: {
-    borderRadius: radii.xl,
-    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.lg,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#E5E7EB',
     padding: spacing.md,
     overflow: 'hidden',
-    shadowColor: colors.brandBlack,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 14,
-    elevation: 4,
+    marginBottom: spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.brandRed,
   },
-  homeHeroDiagonal: {
-    position: 'absolute',
-    left: -150,
-    top: -70,
-    width: 350,
-    height: 420,
-    backgroundColor: colors.brandRed,
-    transform: [{ rotate: '-17deg' }],
+  homeHeroCarousel: {
+    paddingRight: 0,
   },
-  homeHeroStripeOne: {
-    position: 'absolute',
-    left: 120,
-    top: -35,
-    width: 96,
-    height: 170,
-    borderRadius: radii.lg,
-    backgroundColor: 'rgba(255,255,255,0.26)',
-    transform: [{ rotate: '-24deg' }],
-  },
-  homeHeroStripeTwo: {
-    position: 'absolute',
-    left: 152,
-    top: -18,
-    width: 84,
-    height: 146,
-    borderRadius: radii.lg,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    transform: [{ rotate: '-24deg' }],
-  },
-  homeHeroRedOrb: {
-    position: 'absolute',
-    top: -54,
-    right: 36,
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    backgroundColor: colors.brandRed,
-    opacity: 0.95,
+  homeHeroSlide: {
+    width: '100%',
   },
   homeHeroLayout: {
-    flexDirection: 'column',
-    gap: spacing.sm,
-    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
   },
   homeHeroMediaWrap: {
-    width: '100%',
-    justifyContent: 'flex-end',
-    gap: spacing.xs,
+    flex: 1,
   },
   homeHeroMediaCard: {
-    minHeight: 188,
-    borderRadius: radii.lg,
+    width: '100%',
+    height: 176,
+    borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -4204,112 +4464,80 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   homeHeroMediaFallbackText: {
-    color: colors.textInverted,
-    fontSize: typography.h3,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  homeHeroPriceBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.brandRed,
-    backgroundColor: colors.brandRed,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
-  },
-  homeHeroPriceCaption: {
-    color: colors.textInverted,
-    fontSize: typography.micro,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  homeHeroPriceValue: {
-    color: colors.textInverted,
+    color: colors.textSecondary,
     fontSize: typography.caption,
-    fontWeight: '900',
+    fontWeight: '800',
   },
   homeHeroContent: {
-    width: '100%',
-    gap: spacing.xs,
-    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  homeHeroEyebrow: {
-    color: colors.brandBlack,
-    fontSize: typography.micro,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
+  homeHeroContentPanel: {
+    flex: 1,
+    justifyContent: 'space-between',
+    height: 176,
+  },
+  homeHeroTextBlock: {
+    gap: spacing.xs,
   },
   homeHeroTitle: {
     color: colors.textPrimary,
-    fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 31,
+    fontSize: 17,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  homeHeroPriceBlock: {
+    gap: 4,
+  },
+  homeHeroPriceLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+    fontWeight: '700',
     textTransform: 'uppercase',
   },
-  homeHeroSubtitle: {
-    color: colors.textSecondary,
-    fontSize: typography.caption,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  homeHeroTagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-  },
-  homeHeroTag: {
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: '#E8C5C9',
-    backgroundColor: '#FFF8F9',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
-  },
-  homeHeroTagText: {
-    color: colors.brandBlack,
-    fontSize: typography.micro,
-    fontWeight: '800',
-  },
-  homeHeroActions: {
-    flexDirection: 'column',
-    gap: spacing.xs,
-    marginTop: spacing.xs,
+  homeHeroPriceMain: {
+    color: colors.brandRed,
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
   },
   homeHeroPrimaryButton: {
-    minHeight: 48,
-    borderRadius: radii.pill,
+    minHeight: 40,
+    borderRadius: radii.md,
     backgroundColor: colors.brandRed,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
+    alignSelf: 'flex-end',
+    minWidth: 136,
+    marginTop: spacing.xs,
   },
   homeHeroPrimaryButtonText: {
     color: colors.textInverted,
     fontSize: typography.caption,
     fontWeight: '900',
   },
-  homeHeroGhostButton: {
-    minHeight: 46,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: '#E8C5C9',
-    backgroundColor: '#FFF8F9',
-    alignItems: 'center',
+  homeHeroDots: {
+    flexDirection: 'row',
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
   },
-  homeHeroGhostButtonText: {
-    color: colors.brandRed,
-    fontSize: typography.caption,
-    fontWeight: '800',
+  homeHeroDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E3B7BF',
+  },
+  homeHeroDotActive: {
+    width: 20,
+    backgroundColor: colors.brandRed,
   },
   homeAlertCard: {
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#F5BFC5',
-    backgroundColor: '#FFF3F5',
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
     padding: spacing.sm,
   },
   homeAlertText: {
@@ -4319,6 +4547,22 @@ const styles = StyleSheet.create({
   },
   homeValueStrip: {
     gap: spacing.xs,
+  },
+  homeBodyGrid: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    flexWrap: 'wrap',
+  },
+  homePrimaryColumn: {
+    flex: 1.25,
+    minWidth: 0,
+    gap: spacing.md,
+  },
+  homeSecondaryColumn: {
+    flex: 0.95,
+    minWidth: 0,
+    gap: spacing.md,
   },
   homeValuePill: {
     borderRadius: radii.lg,
@@ -4334,19 +4578,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.caption,
     fontWeight: '800',
+    flexShrink: 1,
   },
   homeValueMeta: {
     color: colors.textSecondary,
     fontSize: typography.micro,
     fontWeight: '600',
+    lineHeight: 16,
   },
   homeSectionCard: {
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E6EBF3',
+    borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
     padding: spacing.md,
     gap: spacing.sm,
+    marginTop: -2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   homeCategoryGrid: {
     flexDirection: 'row',
@@ -4367,10 +4619,41 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: typography.caption,
     fontWeight: '800',
+    lineHeight: 18,
   },
   homeCategoryTileMeta: {
     color: colors.textSecondary,
     fontSize: typography.micro,
+  },
+  homeCategoryCarousel: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  homeCategoryCarouselCard: {
+    width: 176,
+    minHeight: 96,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    padding: spacing.sm,
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  homeCategoryCarouselCardAccent: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brandRed,
+  },
+  homeCategoryCarouselTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.caption,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  homeCategoryCarouselMeta: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+    fontWeight: '700',
   },
   homeShelfCard: {
     borderRadius: radii.lg,
@@ -4383,8 +4666,8 @@ const styles = StyleSheet.create({
   homeTrustCard: {
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#F2D2D6',
-    backgroundColor: '#FFF8F9',
+    borderColor: '#F0D5DA',
+    backgroundColor: '#FFFFFF',
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -4493,6 +4776,11 @@ const styles = StyleSheet.create({
   },
   categoryChipText: { color: colors.textPrimary, fontSize: typography.caption, fontWeight: '700' },
   chipRow: { gap: spacing.sm, paddingRight: spacing.md },
+  homeChipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   collectionScopeRow: {
     borderRadius: radii.md,
     borderWidth: 1,
@@ -4527,6 +4815,182 @@ const styles = StyleSheet.create({
   },
   rail: { gap: spacing.sm, paddingRight: spacing.md },
   railCardWrap: { width: 196 },
+  homeFeaturedCarousel: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  homeFeaturedCardWrap: {
+    width: 208,
+  },
+  homeFeaturedSectionCard: {
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  homePromoRibbon: {
+    gap: spacing.sm,
+  },
+  homePromoBadge: {
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    gap: spacing.xxs,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  homePromoBadgeTitle: {
+    color: colors.brandBlack,
+    fontSize: typography.caption,
+    fontWeight: '900',
+  },
+  homePromoBadgeMeta: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+    lineHeight: 16,
+  },
+  homeShelfShowcase: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  homeShelfHeader: {
+    gap: spacing.xs,
+  },
+  homeShelfHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  homeShelfAction: {
+    minHeight: 36,
+    borderRadius: radii.md,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xxs,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: spacing.sm,
+  },
+  homeShelfActionText: {
+    color: colors.brandBlack,
+    fontSize: typography.caption,
+    fontWeight: '800',
+    includeFontPadding: false,
+  },
+  homeShelfCarousel: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  homeShelfCardWrap: {
+    width: 198,
+  },
+  homeVisualCategoryBand: {
+    gap: spacing.sm,
+  },
+  homeCategoryVisualCarousel: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  homeCategoryVisualCard: {
+    width: 176,
+    minHeight: 140,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  homeCategoryVisualCardAccent: {
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brandRed,
+  },
+  homeCategoryVisualTitle: {
+    color: colors.brandBlack,
+    fontSize: typography.h3,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  homeCategoryVisualMeta: {
+    color: colors.textSecondary,
+    fontSize: typography.caption,
+    fontWeight: '700',
+  },
+  homeProductGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  homeGridCardWrap: {
+    width: '48%',
+    minWidth: 156,
+  },
+  homeCompactList: {
+    gap: spacing.sm,
+  },
+  homeCompactListItem: {
+    width: '100%',
+  },
+  homeCompactCarousel: {
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
+  homeCompactCarouselCard: {
+    width: 194,
+  },
+  homeCollectionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  homeCollectionTile: {
+    width: '48%',
+    minHeight: 132,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#E6EBF3',
+    backgroundColor: '#F9FBFE',
+    padding: spacing.sm,
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  homeCollectionTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.caption,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  homeCollectionMeta: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+    lineHeight: 16,
+  },
+  homeCollectionCount: {
+    color: colors.brandRed,
+    fontSize: typography.micro,
+    fontWeight: '800',
+  },
+  homeMiniPromoCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: '#F0D5DA',
+    backgroundColor: '#FFFFFF',
+    padding: spacing.md,
+    gap: spacing.xs,
+  },
+  homeMiniPromoTitle: {
+    color: colors.textPrimary,
+    fontSize: typography.h3,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
 
   catalogHeroCard: {
     borderRadius: radii.xl,
@@ -4600,9 +5064,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: spacing.md,
+  },
+  sectionHeadLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   seeAll: { color: colors.brandRed, fontSize: typography.caption, fontWeight: '800' },
+  seeAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+  },
 
   categoryCard: {
     backgroundColor: colors.surface,
@@ -5138,25 +5612,344 @@ const styles = StyleSheet.create({
   },
   totalLabel: { color: colors.textSecondary, fontSize: typography.body },
   totalValue: { color: colors.brandBlack, fontWeight: '900', fontSize: typography.h2 },
+  totalValueLarge: { color: colors.brandBlack, fontWeight: '900', fontSize: typography.h1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
 
-  loyaltyHero: {
-    backgroundColor: colors.surfaceDark,
+  // Cart Screen Styles
+  cartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  checkoutSummary: {
+    backgroundColor: colors.surface,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: '#2A2E36',
     padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  summaryTitle: { fontSize: typography.h4, color: colors.brandBlack, fontWeight: '700' },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  totalInfo: { gap: spacing.xxs },
+  totalLabel: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '600' },
+  totalSubLabel: { fontSize: typography.caption, color: colors.textSecondary },
+  totalValue: { fontSize: typography.h3, color: colors.brandGreen, fontWeight: '900' },
+  checkoutButton: {
+    backgroundColor: colors.brandGreen,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.sm,
   },
-  loyaltyHeroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  loyaltyTierTag: {
-    color: colors.brandAmber,
-    fontSize: typography.caption,
-    fontWeight: '900',
-    textTransform: 'uppercase',
+  checkoutButtonText: { color: '#FFFFFF', fontSize: typography.body, fontWeight: '700' },
+
+  // Delivery Address
+  deliveryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  loyaltyTitle: { color: '#FFFFFF', fontSize: typography.h3, fontWeight: '700' },
-  loyaltyPoints: { color: '#FFFFFF', fontSize: typography.h1, fontWeight: '900' },
-  loyaltyMeta: { color: '#D1D5DB', fontSize: typography.caption },
+  deliveryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  deliveryEta: { color: colors.textSecondary, fontSize: typography.caption },
+  addressDisplay: { gap: spacing.md },
+  addressBadge: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  addressBadgeText: { color: '#065F46', fontSize: typography.caption, fontWeight: '600' },
+  addressDetails: { gap: spacing.xxs },
+  addressName: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '600' },
+  addressContact: { fontSize: typography.caption, color: colors.textSecondary },
+  addressLocation: { fontSize: typography.caption, color: colors.textSecondary, lineHeight: 16 },
+  changeAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+  },
+  changeAddressText: { color: colors.brandBlue, fontSize: typography.caption, fontWeight: '600' },
+
+  // Address Form
+  addressForm: { gap: spacing.md },
+  formHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  formTitle: { fontSize: typography.body, color: colors.brandAmber, fontWeight: '600' },
+  formFields: { gap: spacing.sm },
+  addressInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    fontSize: typography.body,
+    color: colors.brandBlack,
+  },
+  addressInputHalf: { flex: 1 },
+  addressRow: { flexDirection: 'row', gap: spacing.sm },
+  savedAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: '#EFF6FF',
+    borderRadius: radii.md,
+  },
+  savedAddressText: { color: colors.brandBlue, fontSize: typography.caption, fontWeight: '600' },
+
+  // Cart Items
+  cartItemsSection: { gap: spacing.md },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: { fontSize: typography.h4, color: colors.brandBlack, fontWeight: '600' },
+  cartItemCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  productImageContainer: { width: 80, height: 80, borderRadius: radii.md, overflow: 'hidden' },
+  productImage: { width: '100%', height: '100%' },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productDetails: { flex: 1, gap: spacing.sm },
+  productName: {
+    fontSize: typography.body,
+    color: colors.brandBlack,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  productVariant: { fontSize: typography.caption, color: colors.textSecondary },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  productPrice: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '700' },
+  productSubtotal: { fontSize: typography.caption, color: colors.brandGreen, fontWeight: '600' },
+  stockWarning: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  stockWarningText: { fontSize: typography.caption, color: '#F59E0B' },
+  quantityControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  quantityButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  quantityButton: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityValue: {
+    fontSize: typography.body,
+    fontWeight: '700',
+    color: colors.brandBlack,
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  removeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.md,
+  },
+  removeButtonText: { color: '#EF4444', fontSize: typography.caption, fontWeight: '600' },
+
+  // Redesigned Account Screen Styles
+  accountHeaderCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  accountProfileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  accountAvatarContainer: { position: 'relative' },
+  accountAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: radii.xl,
+    backgroundColor: colors.brandRed,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountAvatarText: { color: '#FFFFFF', fontSize: typography.h2, fontWeight: '900' },
+  editProfileButton: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: radii.pill,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  accountProfileInfo: { flex: 1, gap: spacing.xs },
+  accountName: { fontSize: typography.h3, color: colors.brandBlack, fontWeight: '700' },
+  accountEmail: { fontSize: typography.body, color: colors.textSecondary },
+  accountMembershipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    borderRadius: radii.pill,
+    marginTop: spacing.xs,
+  },
+  accountMembershipText: { fontSize: typography.caption, color: '#B45309', fontWeight: '600' },
+
+  // Account Stats Grid
+  accountStatsGrid: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  accountStatItem: {
+    flex: 1,
+    backgroundColor: '#F8F9FB',
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  accountStatNumber: { fontSize: typography.h2, color: colors.brandBlack, fontWeight: '900' },
+  accountStatLabel: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Quick Actions
+  accountQuickActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  quickActionButton: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  quickActionText: { fontSize: typography.caption, color: colors.brandBlack, fontWeight: '600' },
+
+  // Account QR Section
+  accountQrSection: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  accountQrHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  accountQrContainer: {
+    backgroundColor: '#F8F9FB',
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  accountQrPreview: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  accountQrInfo: { flex: 1, gap: spacing.xs },
+  accountQrTitle: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '600' },
+  accountQrSubtitle: { fontSize: typography.caption, color: colors.textSecondary },
+  accountQrAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  accountQrActionText: { fontSize: typography.caption, color: colors.brandBlue, fontWeight: '600' },
+  accountQrLoading: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  accountQrLoadingText: { fontSize: typography.caption, color: colors.textSecondary },
+  accountQrError: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  accountQrErrorText: { fontSize: typography.caption, color: '#EF4444', textAlign: 'center' },
+  accountQrRetryButton: {
+    backgroundColor: colors.brandRed,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  accountQrRetryText: { color: '#FFFFFF', fontSize: typography.caption, fontWeight: '600' },
+  accountQrGenerateButton: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  accountQrGenerateText: { fontSize: typography.body, color: colors.brandBlue, fontWeight: '600' },
   progressTrack: {
     width: '100%',
     height: 8,
@@ -5248,6 +6041,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 8,
     elevation: 1,
+  },
+  inlineAddressForm: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  textInputHalf: {
+    flex: 1,
+  },
+  textInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    fontSize: typography.body,
+    color: colors.brandBlack,
+    backgroundColor: '#FFFFFF',
   },
   skeleton: {
     backgroundColor: colors.skeletonBase,
@@ -5795,5 +6609,135 @@ const styles = StyleSheet.create({
   addressQualityFill: {
     height: '100%',
     backgroundColor: colors.success,
+  },
+
+  // Redesigned Loyalty Screen Styles
+  loyaltyHeroLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  loyaltyTierBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  loyaltyPointsCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  loyaltyPointsLabel: { color: '#D1D5DB', fontSize: typography.caption, textAlign: 'center' },
+  loyaltyPointsSub: { color: '#9CA3AF', fontSize: typography.caption, textAlign: 'center' },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  progressTitle: { color: '#FFFFFF', fontSize: typography.body, fontWeight: '600' },
+  progressValue: { color: colors.brandAmber, fontSize: typography.body, fontWeight: '700' },
+  maxTierCard: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  maxTierText: {
+    color: '#FFD700',
+    fontSize: typography.h3,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  maxTierSub: { color: '#D1D5DB', fontSize: typography.caption, textAlign: 'center' },
+  voucherCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  voucherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  voucherRate: { color: colors.textSecondary, fontSize: typography.caption },
+  voucherOptions: { paddingBottom: spacing.sm, gap: spacing.sm },
+  voucherOption: {
+    backgroundColor: '#F8F9FB',
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    minWidth: 100,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  voucherOptionActive: {
+    backgroundColor: colors.brandGreen,
+    borderWidth: 2,
+    borderColor: '#10B981',
+  },
+  voucherOptionDisabled: { backgroundColor: '#F3F4F6', opacity: 0.6 },
+  voucherOptionPoints: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  voucherOptionPointsActive: { color: '#FFFFFF' },
+  voucherOptionPointsDisabled: { color: '#9CA3AF' },
+  voucherOptionValue: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '700' },
+  voucherOptionValueActive: { color: '#FFFFFF' },
+  voucherOptionValueDisabled: { color: '#9CA3AF' },
+  voucherOptionNote: { fontSize: typography.caption, color: colors.brandAmber },
+  activeVoucherCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderLeftWidth: 4,
+  },
+  voucherCode: {
+    color: colors.brandBlack,
+    fontSize: typography.h3,
+    fontWeight: '700',
+    marginTop: spacing.xs,
+  },
+  voucherDetails: { gap: spacing.sm, marginTop: spacing.md },
+  voucherValueRow: { alignItems: 'center', gap: spacing.xs },
+  voucherValue: { color: '#10B981', fontSize: typography.h2, fontWeight: '900' },
+  voucherValueLabel: { color: colors.textSecondary, fontSize: typography.caption },
+  voucherExpiry: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  voucherExpiryText: { color: '#EF4444', fontSize: typography.caption },
+  memberCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  memberHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  memberSubtext: { color: colors.textSecondary, fontSize: typography.caption },
+  qrPlaceholder: { alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  accountQrLoading: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  accountQrLoadingText: { fontSize: typography.caption, color: colors.textSecondary },
+
+  // Redesigned Cart Screen Styles
+  cartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  checkoutSummary: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 });

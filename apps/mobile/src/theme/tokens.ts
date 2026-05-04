@@ -12,6 +12,8 @@ export const colors = {
   brandRed: '#E30613',
   brandBlack: '#2B2B2F',
   brandAmber: '#FFB800',
+  brandBlue: '#3B82F6',
+  brandGreen: '#10B981',
   semanticSuccessBg: '#E8F5EE',
   semanticWarningBg: '#FFF6E8',
   semanticInfoBg: '#E9F3FB',
@@ -70,8 +72,8 @@ export const typography = {
   h1: 24,
   h2: 20,
   h3: 17,
+  h4: 15,
   body: 14,
   caption: 12,
   micro: 11,
 };
-

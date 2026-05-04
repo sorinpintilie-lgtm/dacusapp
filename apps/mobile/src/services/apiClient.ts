@@ -1,5 +1,6 @@
 import { mobileEnv } from '../config/env';
 import { getSessionToken } from './sessionStorage';
+import { getFirebaseIdToken } from './firebaseAuth';
 
 type ApiRequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -40,9 +41,14 @@ const performRequest = async <T>(path: string, options?: ApiRequestOptions): Pro
   const headers: Record<string, string> = {};
 
   if (options?.auth) {
-    const token = await getSessionToken();
-    if (token) {
-      headers['x-session-token'] = token;
+    const firebaseToken = await getFirebaseIdToken(true);
+    if (firebaseToken) {
+      headers['Authorization'] = `Bearer ${firebaseToken}`;
+    } else {
+      const sessionToken = await getSessionToken();
+      if (sessionToken) {
+        headers['x-session-token'] = sessionToken;
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 import { Image } from 'expo-image';
@@ -8,6 +8,7 @@ import { ProductCard } from '../components/ProductCard';
 import { Skeleton } from '../components/Skeleton';
 import { colors } from '../theme/tokens';
 import { formatPrice, getStockBadgeTone } from '../utils/catalogFilters';
+import { fixRomanianMojibake } from '../utils/string';
 import type { ScreenStyles } from './screenTypes';
 
 type ProductDetailsScreenProps = {
@@ -63,13 +64,40 @@ export const ProductDetailsScreen = ({
   ) : (
     <View style={styles.stackLarge}>
       <TouchableOpacity style={styles.detailsBackButton} activeOpacity={0.86} onPress={onBack}>
-        <MaterialCommunityIcons name="arrow-left" size={18} color={colors.brandBlack} />
+        <Ionicons name="arrow-back" size={18} color={colors.brandBlack} />
         <Text style={styles.detailsBackButtonText}>Înapoi la catalog</Text>
       </TouchableOpacity>
 
+      <View style={styles.detailsShowcaseCard}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() =>
+            onOpenImageZoom(selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl)
+          }
+        >
+          {hasImageUrl(selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl) ? (
+            <Image
+              source={{ uri: selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl }}
+              style={styles.detailsMedia}
+              resizeMode="contain"
+              contentFit="contain"
+              transition={200}
+              placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            />
+          ) : (
+            <View style={styles.detailsMediaFallback}>
+              <Text style={styles.detailsMediaFallbackText}>Imagine indisponibilă</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.detailsHint}>Atinge imaginea produsului pentru a o mări.</Text>
+      </View>
+
       <View style={styles.detailsPurchaseCard}>
         <View style={styles.detailsShowcaseTop}>
-          <Text style={styles.detailsTitle}>{selectedProduct?.name}</Text>
+          <Text style={styles.detailsTitle}>
+            {fixRomanianMojibake(selectedProduct?.name || '')}
+          </Text>
           <View
             style={[
               styles.detailsStockBadge,
@@ -92,12 +120,12 @@ export const ProductDetailsScreen = ({
                   styles.stockPillTextOutOfStock,
               ]}
             >
-              {selectedProduct?.stockLabel}
+              {fixRomanianMojibake(selectedProduct?.stockLabel || '')}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.detailsSub}>{selectedProduct?.brand}</Text>
+        <Text style={styles.detailsSub}>{fixRomanianMojibake(selectedProduct?.brand || '')}</Text>
 
         <View style={styles.detailsPriceRow}>
           <Text style={styles.detailsPrice}>{formatPrice(selectedProduct?.priceRon)}</Text>
@@ -124,7 +152,7 @@ export const ProductDetailsScreen = ({
                     onPress={() => onSetVariant(variant.id)}
                   >
                     <Text style={[styles.filterPillText, active && styles.filterPillTextActive]}>
-                      {variant.name} · {formatPrice(variant.priceRon)}
+                      {fixRomanianMojibake(variant.name || '')} · {formatPrice(variant.priceRon)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -174,34 +202,6 @@ export const ProductDetailsScreen = ({
             ) : null}
           </View>
         </View>
-      </View>
-
-      <View style={styles.detailsShowcaseCard}>
-        <View style={styles.detailsBrandBadge}>
-          <Text style={styles.detailsBrandBadgeText}>{selectedProduct?.brand ?? 'Dacus'}</Text>
-        </View>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() =>
-            onOpenImageZoom(selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl)
-          }
-        >
-          {hasImageUrl(selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl) ? (
-            <Image
-              source={{ uri: selectedProduct?.imageUrl ?? selectedProduct?.thumbnailUrl }}
-              style={styles.detailsMedia}
-              resizeMode="contain"
-              contentFit="contain"
-              transition={200}
-              placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-            />
-          ) : (
-            <View style={styles.detailsMediaFallback}>
-              <Text style={styles.detailsMediaFallbackText}>Imagine indisponibilă</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-        <Text style={styles.detailsHint}>Atinge imaginea produsului pentru a o mări.</Text>
       </View>
 
       {bundleProducts.length > 0 ? (
@@ -302,7 +302,9 @@ export const ProductDetailsScreen = ({
         <Text style={styles.sectionLabel}>Specificații rapide</Text>
         <View style={styles.detailsSpecRow}>
           <Text style={styles.detailsSpecLabel}>Brand</Text>
-          <Text style={styles.detailsSpecValue}>{selectedProduct?.brand || 'Dacus'}</Text>
+          <Text style={styles.detailsSpecValue}>
+            {fixRomanianMojibake(selectedProduct?.brand || '') || 'Dacus'}
+          </Text>
         </View>
         <View style={styles.detailsSpecRow}>
           <Text style={styles.detailsSpecLabel}>SKU</Text>

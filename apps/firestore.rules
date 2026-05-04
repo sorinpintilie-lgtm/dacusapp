@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catalog - readable by all authenticated users
+    match /catalog/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only Firebase Functions can write
+    }
+    
+    // Commerce data - readable by owner, writable by owner
+    match /users/{userId}/{document=**} {
+      allow read: if request.auth.uid == userId;
+      allow write: if request.auth.uid == userId;
+    }
+    
+    // Public read for catalog
+    match /public/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

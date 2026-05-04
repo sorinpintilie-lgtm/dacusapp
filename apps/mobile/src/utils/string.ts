@@ -103,3 +103,27 @@ export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 3) + '...';
 }
+
+const mojibakeFixMap: Record<string, string> = {
+  Äƒ: 'ă',
+  'Ä‚': 'Ă',
+  'Ã¢': 'â',
+  'Ã‚': 'Â',
+  'Ã®': 'î',
+  ÃŽ: 'Î',
+  'È™': 'ș',
+  'È˜': 'Ș',
+  'È›': 'ț',
+  Èš: 'Ț',
+  'Â·': '·',
+  'â€¢': '•',
+  'â€”': '-',
+  'â€“': '-',
+};
+
+const mojibakePattern = new RegExp(Object.keys(mojibakeFixMap).join('|'), 'g');
+
+export function fixRomanianMojibake(value: string): string {
+  if (!value) return value;
+  return value.replace(mojibakePattern, (match) => mojibakeFixMap[match] ?? match);
+}

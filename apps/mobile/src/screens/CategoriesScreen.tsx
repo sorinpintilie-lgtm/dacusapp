@@ -1,9 +1,10 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
 
 import type { CatalogCategory } from '../data/catalog';
 import { Skeleton } from '../components/Skeleton';
-import { colors } from '../theme/tokens';
+import { colors, spacing } from '../theme/tokens';
+import { fixRomanianMojibake } from '../utils/string';
 import type { ScreenStyles } from './screenTypes';
 
 type CategoriesScreenProps = {
@@ -24,7 +25,10 @@ export const CategoriesScreen = ({
   hasImageUrl,
 }: CategoriesScreenProps) => (
   <View style={styles.stackLarge}>
-    <Text style={styles.pageHeading}>Toate categoriile</Text>
+    <View style={styles.sectionHeadRow}>
+      <Ionicons name="apps-outline" size={22} color={colors.brandRed} />
+      <Text style={styles.pageHeading}>Toate categoriile</Text>
+    </View>
     <Text style={styles.bodyMuted}>Intră direct în colecția care te interesează.</Text>
     {isLoading ? (
       <>
@@ -41,9 +45,11 @@ export const CategoriesScreen = ({
           onPress={() => onOpenCategory(category.id)}
         >
           <View style={styles.categoryContent}>
-            <Text style={styles.categoryTitle}>{category.name}</Text>
+            <Text style={styles.categoryTitle}>{fixRomanianMojibake(category.name)}</Text>
             <Text style={styles.categoryDescription} numberOfLines={2}>
-              {category.description?.trim() || 'Explorează produsele din această categorie.'}
+              {fixRomanianMojibake(
+                category.description?.trim() || 'Explorează produsele din această categorie.',
+              )}
             </Text>
             <Text style={styles.categoryMeta}>{countByCategory.get(category.id) ?? 0} produse</Text>
           </View>
@@ -55,7 +61,7 @@ export const CategoriesScreen = ({
                 resizeMode="cover"
               />
             ) : null}
-            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
+            <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
           </View>
         </TouchableOpacity>
       ))

@@ -1,11 +1,12 @@
-import { memo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { memo, useRef } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { Image } from 'expo-image';
 
 import type { CatalogProduct } from '../data/catalog';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 import { formatPrice, getStockBadgeTone } from '../utils/catalogFilters';
+import { fixRomanianMojibake } from '../utils/string';
 
 const hasImageUrl = (value: string | undefined): value is string =>
   !!value && /^https?:\/\//.test(value);
@@ -32,6 +33,7 @@ export const ProductCard = memo(
     compareDisabled = false,
     onToggleCompare,
   }: ProductCardProps) => {
+    const bounceAnim = useRef(new Animated.Value(1)).current;
     const hasDiscount =
       typeof product.oldPriceRon === 'number' && product.oldPriceRon > product.priceRon;
     const discountPercent = hasDiscount
@@ -42,8 +44,33 @@ export const ProductCard = memo(
       : 0;
     const stockTone = getStockBadgeTone(product.stockLabel);
 
+    const handleAddToCart = () => {
+      // Bounce animation
+      Animated.sequence([
+        Animated.timing(bounceAnim, {
+          toValue: 0.95,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(bounceAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 300,
+          friction: 10,
+        }),
+      ]).start();
+
+      onAdd(product.id);
+    };
+
     return (
-      <View style={[styles.productCard, compact && styles.productCardCompact]}>
+      <Animated.View
+        style={[
+          styles.productCard,
+          compact && styles.productCardCompact,
+          { transform: [{ scale: bounceAnim }] },
+        ]}
+      >
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => onOpen(product.id)}
@@ -102,9 +129,9 @@ export const ProductCard = memo(
           ) : null}
 
           <View style={styles.productCardBody}>
-            <Text style={styles.productBrand}>{product.brand}</Text>
+            <Text style={styles.productBrand}>{fixRomanianMojibake(product.brand)}</Text>
             <Text style={styles.productName} numberOfLines={2}>
-              {product.name}
+              {fixRomanianMojibake(product.name)}
             </Text>
             {product.sku ? <Text style={styles.productSku}>SKU: {product.sku}</Text> : null}
 
@@ -131,7 +158,7 @@ export const ProductCard = memo(
                   stockTone === 'outOfStock' && styles.stockPillTextOutOfStock,
                 ]}
               >
-                {product.stockLabel}
+                {fixRomanianMojibake(product.stockLabel)}
               </Text>
             </View>
 
@@ -142,15 +169,11 @@ export const ProductCard = memo(
         </TouchableOpacity>
 
         <View style={styles.productActionsRow}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.addButton}
-            onPress={() => onAdd(product.id)}
-          >
+          <TouchableOpacity activeOpacity={0.9} style={styles.addButton} onPress={handleAddToCart}>
             <Text style={styles.addButtonText}>Adaugă în coș</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
     );
   },
 );

@@ -1,29 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { colors, radii, spacing } from '../theme/tokens';
+import { fixRomanianMojibake } from '../utils/string';
 
 /**
  * Empty state icon types
  */
-export type EmptyStateIcon = 
-  | 'cart' 
-  | 'search' 
-  | 'favorites' 
-  | 'orders' 
-  | 'products' 
-  | 'wifi' 
+export type EmptyStateIcon =
+  | 'cart'
+  | 'search'
+  | 'favorites'
+  | 'orders'
+  | 'products'
+  | 'wifi'
   | 'error';
-
-/**
- * Empty state configuration
- */
-export interface EmptyStateConfig {
-  icon: EmptyStateIcon;
-  title: string;
-  description: string;
-  actionLabel?: string;
-  onAction?: () => void;
-}
 
 /**
  * Icon component that renders different icons based on type
@@ -101,34 +91,20 @@ function EmptyStateIcon({ type }: { type: EmptyStateIcon }) {
     }
   };
 
-  return (
-    <View style={iconStyles}>
-      {getIconContent()}
-    </View>
-  );
+  return <View style={iconStyles}>{getIconContent()}</View>;
 }
 
 /**
  * Reusable empty state component
  */
-export function EmptyState({
-  icon,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: EmptyStateConfig) {
+export function EmptyState({ icon, title, description, actionLabel, onAction }: EmptyStateConfig) {
   return (
     <View style={styles.container}>
       <EmptyStateIcon type={icon} />
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
       {actionLabel && onAction && (
-        <TouchableOpacity 
-          style={styles.actionButton} 
-          onPress={onAction}
-          activeOpacity={0.7}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={onAction} activeOpacity={0.7}>
           <Text style={styles.actionText}>{actionLabel}</Text>
         </TouchableOpacity>
       )}
@@ -139,11 +115,7 @@ export function EmptyState({
 /**
  * Empty cart state
  */
-export function EmptyCartState({ 
-  onBrowseProducts 
-}: { 
-  onBrowseProducts?: () => void;
-}) {
+export function EmptyCartState({ onBrowseProducts }: { onBrowseProducts?: () => void }) {
   return (
     <EmptyState
       icon="cart"
@@ -158,11 +130,11 @@ export function EmptyCartState({
 /**
  * No search results state
  */
-export function NoSearchResultsState({ 
-  query, 
+export function NoSearchResultsState({
+  query,
   onClearSearch,
-  onBrowseAll 
-}: { 
+  onBrowseAll,
+}: {
   query?: string;
   onClearSearch?: () => void;
   onBrowseAll?: () => void;
@@ -171,10 +143,12 @@ export function NoSearchResultsState({
     <EmptyState
       icon="search"
       title="Niciun rezultat găsit"
-      description={query 
-        ? `Nu am găsit produse pentru "${query}"` 
-        : "Nu am găsit produse care să corespundă căutării tale"}
-      actionLabel={query ? "Șterge filtrele" : "Vezi toate produsele"}
+      description={
+        query
+          ? `Nu am găsit produse pentru "${fixRomanianMojibake(query)}"`
+          : 'Nu am găsit produse care să corespundă căutării tale'
+      }
+      actionLabel={query ? 'Șterge filtrele' : 'Vezi toate produsele'}
       onAction={query ? onClearSearch : onBrowseAll}
     />
   );
@@ -183,11 +157,7 @@ export function NoSearchResultsState({
 /**
  * No favorites state
  */
-export function NoFavoritesState({ 
-  onBrowseProducts 
-}: { 
-  onBrowseProducts?: () => void;
-}) {
+export function NoFavoritesState({ onBrowseProducts }: { onBrowseProducts?: () => void }) {
   return (
     <EmptyState
       icon="favorites"
@@ -202,11 +172,7 @@ export function NoFavoritesState({
 /**
  * No orders state
  */
-export function NoOrdersState({ 
-  onBrowseProducts 
-}: { 
-  onBrowseProducts?: () => void;
-}) {
+export function NoOrdersState({ onBrowseProducts }: { onBrowseProducts?: () => void }) {
   return (
     <EmptyState
       icon="orders"
@@ -221,11 +187,7 @@ export function NoOrdersState({
 /**
  * No products state
  */
-export function NoProductsState({ 
-  onRefresh 
-}: { 
-  onRefresh?: () => void;
-}) {
+export function NoProductsState({ onRefresh }: { onRefresh?: () => void }) {
   return (
     <EmptyState
       icon="products"
@@ -240,11 +202,7 @@ export function NoProductsState({
 /**
  * Network error state
  */
-export function NetworkErrorState({ 
-  onRetry 
-}: { 
-  onRetry?: () => void;
-}) {
+export function NetworkErrorState({ onRetry }: { onRetry?: () => void }) {
   return (
     <EmptyState
       icon="wifi"
@@ -259,10 +217,10 @@ export function NetworkErrorState({
 /**
  * Generic error state
  */
-export function ErrorState({ 
-  message = "Ceva nu a mers bine",
-  onRetry 
-}: { 
+export function ErrorState({
+  message = 'Ceva nu a mers bine',
+  onRetry,
+}: {
   message?: string;
   onRetry?: () => void;
 }) {

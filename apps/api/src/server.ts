@@ -61,9 +61,79 @@ type BuildServerEnv = ServerEnv & {
   searchIndex?: SearchIndex;
 };
 
+const scheduleCatalogRefresh = (app: Awaited<ReturnType<typeof Fastify>>, env: ServerEnv): void => {
+  if (env.NODE_ENV === 'test') return;
+
+  // Get PORT from environment or default
+  const port = parseInt(process.env.PORT || '4000', 10);
+
+  // Determine the correct base URL for internal calls
+  const isProduction = env.NODE_ENV === 'production';
+  const internalUrl = isProduction && env.APP_URL ? env.APP_URL : `http://localhost:${port}`;
+
+  const getNextRefreshTime = (): number => {
+    const now = new Date();
+    const nowInUtc = now.getTime();
+
+    // Bucharest is UTC+3, so 2 AM Bucharest = 23:00 UTC previous day
+    let targetHour = 2 - 3; // 2 AM Bucharest - 3 = 23 UTC
+    let targetDate = new Date(now);
+    targetDate.setUTCHours(targetHour, 0, 0, 0);
+
+    // If 23:00 UTC has passed today, target is tomorrow
+    if (targetDate.getTime() <= nowInUtc) {
+      targetDate.setUTCDate(targetDate.getUTCDate() + 1);
+    }
+
+    return targetDate.getTime();
+  };
+
+  const scheduleNextRefresh = () => {
+    const nextRefresh = getNextRefreshTime();
+    const delayMs = nextRefresh - Date.now();
+    const hoursUntilRefresh = Math.round(delayMs / (1000 * 60 * 60));
+
+    app.log.info(`Catalog refresh scheduled in ${hoursUntilRefresh} hours (2 AM Bucharest time)`);
+
+    setTimeout(async () => {
+      try {
+        app.log.info('Starting scheduled catalog refresh...');
+
+        // Call the internal refresh endpoint
+        const response = await fetch(`${internalUrl}/catalog/refresh`, {
+          method: 'POST',
+        });
+
+        if (response.ok) {
+          app.log.info('Scheduled catalog refresh completed successfully');
+        } else {
+          const errorText = await response.text();
+          app.log.warn(
+            { status: response.status, error: errorText },
+            'Scheduled catalog refresh failed',
+          );
+        }
+      } catch (error) {
+        app.log.error({ err: error }, 'Scheduled catalog refresh error');
+      } finally {
+        // Schedule next refresh
+        scheduleNextRefresh();
+      }
+    }, delayMs);
+  };
+
+  scheduleNextRefresh();
+};
+
 export const buildServer = async (env: BuildServerEnv) => {
   const app = Fastify({
     logger: env.NODE_ENV === 'test' ? false : { level: env.LOG_LEVEL },
+  });
+
+  // Log 404 errors for debugging
+  app.setNotFoundHandler((request, reply) => {
+    app.log.warn({ url: request.url, method: request.method }, 'Route not found');
+    reply.code(404).send({ error: 'Not Found', path: request.url });
   });
 
   const buildDefaultSearchIndex = (): SearchIndex =>
@@ -124,6 +194,20 @@ export const buildServer = async (env: BuildServerEnv) => {
     ...(env.FIREBASE_STORAGE_BUCKET ? { storageBucket: env.FIREBASE_STORAGE_BUCKET } : {}),
   });
 
+  const { initFirebaseAuth } = await import('./routes/utils.js');
+  if (
+    env.FIREBASE_ENABLED &&
+    env.FIREBASE_PROJECT_ID &&
+    env.FIREBASE_CLIENT_EMAIL &&
+    env.FIREBASE_PRIVATE_KEY
+  ) {
+    initFirebaseAuth(
+      env.FIREBASE_PROJECT_ID,
+      env.FIREBASE_CLIENT_EMAIL,
+      env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    );
+  }
+
   const catalogStore = createCatalogStore(firestore);
   const testCommerceStore = env.NODE_ENV === 'test' ? createInMemoryCommerceStore() : null;
 
@@ -170,6 +254,8 @@ export const buildServer = async (env: BuildServerEnv) => {
       ...(env.APP_URL ? { appUrl: env.APP_URL } : {}),
     },
   });
+
+  scheduleCatalogRefresh(app, env);
 
   return app;
 };

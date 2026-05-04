@@ -64,8 +64,12 @@ const collectionSchemaFor = (collectionName: string) => ({
 const collectionNeedsMigration = (schema: unknown) => {
   const candidate = schema as { fields?: Array<{ name?: string; type?: string }> };
   const fields = Array.isArray(candidate.fields) ? candidate.fields : [];
-  const hasCategoryId = fields.some((field) => field.name === 'categoryId' && field.type === 'string');
-  const hasCategoryIds = fields.some((field) => field.name === 'categoryIds' && field.type === 'string[]');
+  const hasCategoryId = fields.some(
+    (field) => field.name === 'categoryId' && field.type === 'string',
+  );
+  const hasCategoryIds = fields.some(
+    (field) => field.name === 'categoryIds' && field.type === 'string[]',
+  );
   return !hasCategoryId || !hasCategoryIds;
 };
 
@@ -160,19 +164,28 @@ export const createSearchIndex = (config: SearchIndexConfig): SearchIndex => {
       const result = await documents().search({
         q: query || '*',
         query_by: 'title,description,tags,vendor,sku,handle,productType',
+        query_by_weights: '10,4,3,6,8,7,5',
         page,
         per_page: perPage,
         sort_by: sortBy,
         ...(filterBy ? { filter_by: filterBy } : {}),
         ...(facetBy ? { facet_by: facetBy } : {}),
         num_typos: 2,
+        drop_tokens_threshold: 1,
+        typo_tokens_threshold: 1,
+        split_join_tokens: 'always',
+        prefix: 'true,true,false,true,true,true,false',
+        infix: 'off,off,off,off,always,always,off',
       });
 
       const payload = result as {
         hits?: Array<{ document: SearchProductDocument }>;
         found?: number;
         page?: number;
-        facet_counts?: Array<{ field_name: string; counts: Array<{ value: string; count: number }> }>;
+        facet_counts?: Array<{
+          field_name: string;
+          counts: Array<{ value: string; count: number }>;
+        }>;
       };
 
       return {
@@ -184,4 +197,3 @@ export const createSearchIndex = (config: SearchIndexConfig): SearchIndex => {
     },
   };
 };
-

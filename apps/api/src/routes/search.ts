@@ -239,7 +239,10 @@ const buildFilterBy = (query: {
   return filters.join(' && ');
 };
 
-const mapSearchDocumentToMobileProduct = (doc: SearchProductDocument, preferredCategoryIds: string[] = []) => {
+const mapSearchDocumentToMobileProduct = (
+  doc: SearchProductDocument,
+  preferredCategoryIds: string[] = [],
+) => {
   const matchedPreferredCategoryId = preferredCategoryIds.find((value) =>
     Array.isArray(doc.categoryIds) ? doc.categoryIds.includes(value) : false,
   );
@@ -248,10 +251,10 @@ const mapSearchDocumentToMobileProduct = (doc: SearchProductDocument, preferredC
     matchedPreferredCategoryId && matchedPreferredCategoryId.trim().length > 0
       ? matchedPreferredCategoryId
       : doc.categoryId && doc.categoryId.trim().length > 0
-      ? doc.categoryId
-      : Array.isArray(doc.categoryIds) && doc.categoryIds.length > 0
-        ? doc.categoryIds[0] ?? 'uncategorized'
-        : 'uncategorized';
+        ? doc.categoryId
+        : Array.isArray(doc.categoryIds) && doc.categoryIds.length > 0
+          ? (doc.categoryIds[0] ?? 'uncategorized')
+          : 'uncategorized';
   const hasOldPrice = typeof doc.compareAtPrice === 'number' && doc.compareAtPrice > doc.price;
   const inStock = doc.availableForSale;
 
@@ -280,10 +283,14 @@ const mapSearchDocumentToMobileProduct = (doc: SearchProductDocument, preferredC
   };
 };
 
-const mapAdminProductToSearchDocument = (product: ShopifyAdminProductNode): SearchProductDocument => {
+const mapAdminProductToSearchDocument = (
+  product: ShopifyAdminProductNode,
+): SearchProductDocument => {
   const variants = product.variants.edges.map((edge) => edge.node);
   const firstVariant = variants[0];
-  const fallbackCategory = product.productType?.trim() ? `product-type-${toSlug(product.productType) || 'diverse'}` : 'uncategorized';
+  const fallbackCategory = product.productType?.trim()
+    ? `product-type-${toSlug(product.productType) || 'diverse'}`
+    : 'uncategorized';
   const collectionIds = Array.from(
     new Set(
       (product.collections?.edges ?? [])
@@ -295,7 +302,8 @@ const mapAdminProductToSearchDocument = (product: ShopifyAdminProductNode): Sear
   const collectionId = normalizedCategoryIds[0] ?? fallbackCategory;
   const price = toNumber(firstVariant?.price);
   const compareAtPrice = toNumber(firstVariant?.compareAtPrice);
-  const availableForSale = (firstVariant?.inventoryQuantity ?? 0) > 0 || (product.status ?? '').toUpperCase() === 'ACTIVE';
+  const availableForSale =
+    (firstVariant?.inventoryQuantity ?? 0) > 0 || (product.status ?? '').toUpperCase() === 'ACTIVE';
   const imageUrl = product.featuredImage?.url?.trim() ?? '';
 
   return {
@@ -305,7 +313,9 @@ const mapAdminProductToSearchDocument = (product: ShopifyAdminProductNode): Sear
     description: (product.description ?? '').slice(0, 1200),
     vendor: (product.vendor ?? 'Dacus').trim() || 'Dacus',
     productType: (product.productType ?? '').trim() || 'Diverse',
-    tags: Array.isArray(product.tags) ? product.tags.filter((tag) => typeof tag === 'string' && tag.trim().length > 0) : [],
+    tags: Array.isArray(product.tags)
+      ? product.tags.filter((tag) => typeof tag === 'string' && tag.trim().length > 0)
+      : [],
     price,
     ...(compareAtPrice > 0 ? { compareAtPrice } : {}),
     hasDiscount: compareAtPrice > price && compareAtPrice > 0,
@@ -362,7 +372,11 @@ const verifyWebhookPayload = (
   if (!hmacHeader) return false;
 
   const bodyForSignature =
-    typeof rawBody !== 'undefined' ? rawBody : typeof payload === 'string' ? payload : JSON.stringify(payload ?? {});
+    typeof rawBody !== 'undefined'
+      ? rawBody
+      : typeof payload === 'string'
+        ? payload
+        : JSON.stringify(payload ?? {});
 
   const hmac = createHmac('sha256', secret);
   if (Buffer.isBuffer(bodyForSignature)) {
@@ -417,12 +431,17 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
     }
 
     const page = Math.max(1, Math.trunc(toNumber(query.page) || 1));
-    const perPage = Math.min(options.searchEnv.maxPerPage, Math.max(10, Math.trunc(toNumber(query.perPage) || 48)));
+    const perPage = Math.min(
+      options.searchEnv.maxPerPage,
+      Math.max(10, Math.trunc(toNumber(query.perPage) || 48)),
+    );
     const sortBy = buildSortBy(query.sortBy);
     const requestedCategoryIds = parseCsv(query.categoryId);
     const filterBy = buildFilterBy(query);
     const onlyDiscount = query.onlyDiscount === '1' || query.onlyDiscount === 'true';
-    const combinedFilterBy = [filterBy, onlyDiscount ? 'hasDiscount:true' : ''].filter((item) => item.length > 0).join(' && ');
+    const combinedFilterBy = [filterBy, onlyDiscount ? 'hasDiscount:true' : '']
+      .filter((item) => item.length > 0)
+      .join(' && ');
     const includeFacets = query.facets === '1' || page === 1;
 
     const result = await options.searchIndex.searchDocuments({
@@ -434,7 +453,9 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
       ...(includeFacets ? { facetBy: 'categoryId,vendor,availableForSale,productType' } : {}),
     });
 
-    const products = result.hits.map((hit) => mapSearchDocumentToMobileProduct(hit.document, requestedCategoryIds));
+    const products = result.hits.map((hit) =>
+      mapSearchDocumentToMobileProduct(hit.document, requestedCategoryIds),
+    );
 
     return {
       products,
@@ -456,7 +477,7 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
 
     const normalizedQuery = normalizeSuggestion(q);
     const result = await options.searchIndex.searchDocuments({
-      query: q,
+      query: `${q}*`,
       page: 1,
       perPage: 12,
       sortBy: '_text_match:desc,createdAt:desc',
@@ -465,7 +486,12 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
     const suggestions = Array.from(
       new Set(
         result.hits
-          .flatMap((hit) => [hit.document.title, hit.document.vendor, hit.document.sku, hit.document.handle])
+          .flatMap((hit) => [
+            hit.document.title,
+            hit.document.vendor,
+            hit.document.sku,
+            hit.document.handle,
+          ])
           .map((value) => value.trim())
           .filter((value) => value.length >= 2)
           .filter((value) => normalizeSuggestion(value).includes(normalizedQuery)),
@@ -476,7 +502,10 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
   });
 
   fastify.post('/search/sync-products', async (request, reply) => {
-    if ((request.headers['x-sync-secret'] ?? '') !== options.searchEnv.syncSecret || !options.searchEnv.syncSecret) {
+    if (
+      (request.headers['x-sync-secret'] ?? '') !== options.searchEnv.syncSecret ||
+      !options.searchEnv.syncSecret
+    ) {
       reply.code(401);
       return { error: 'Unauthorized.' };
     }
@@ -492,16 +521,21 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
     let totalSynced = 0;
 
     do {
-      const pageData: ShopifyAdminProductsResult = await queryShopifyAdmin<ShopifyAdminProductsResult>(
-        options.searchEnv,
-        PRODUCTS_SYNC_QUERY,
-        {
-        cursor,
-        },
-      );
+      const pageData: ShopifyAdminProductsResult =
+        await queryShopifyAdmin<ShopifyAdminProductsResult>(
+          options.searchEnv,
+          PRODUCTS_SYNC_QUERY,
+          {
+            cursor,
+          },
+        );
 
-      const products = pageData.products.edges.map((edge: { node: ShopifyAdminProductNode }) => edge.node);
-      const docs = products.map((product: ShopifyAdminProductNode) => mapAdminProductToSearchDocument(product));
+      const products = pageData.products.edges.map(
+        (edge: { node: ShopifyAdminProductNode }) => edge.node,
+      );
+      const docs = products.map((product: ShopifyAdminProductNode) =>
+        mapAdminProductToSearchDocument(product),
+      );
       await options.searchIndex.upsertDocuments(docs);
 
       totalSynced += docs.length;
@@ -517,8 +551,14 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
       return { error: 'Search index is disabled.' };
     }
 
-    const hmacHeader = typeof request.headers['x-shopify-hmac-sha256'] === 'string' ? request.headers['x-shopify-hmac-sha256'] : undefined;
-    const topic = typeof request.headers['x-shopify-topic'] === 'string' ? request.headers['x-shopify-topic'] : '';
+    const hmacHeader =
+      typeof request.headers['x-shopify-hmac-sha256'] === 'string'
+        ? request.headers['x-shopify-hmac-sha256']
+        : undefined;
+    const topic =
+      typeof request.headers['x-shopify-topic'] === 'string'
+        ? request.headers['x-shopify-topic']
+        : '';
     const rawBody = (request as { rawBody?: string | Buffer }).rawBody;
     const payload = (() => {
       const body = request.body;
@@ -564,9 +604,13 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
     }
 
     const productId = normalizeGidProductId(rawId);
-    const data = await queryShopifyAdmin<ShopifyAdminProductByIdResult>(options.searchEnv, PRODUCT_BY_ID_QUERY, {
-      id: productId,
-    });
+    const data = await queryShopifyAdmin<ShopifyAdminProductByIdResult>(
+      options.searchEnv,
+      PRODUCT_BY_ID_QUERY,
+      {
+        id: productId,
+      },
+    );
 
     if (!data.product) {
       return { ok: true };
@@ -578,7 +622,10 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
   });
 
   fastify.post('/search/register-product-webhooks', async (request, reply) => {
-    if ((request.headers['x-sync-secret'] ?? '') !== options.searchEnv.syncSecret || !options.searchEnv.syncSecret) {
+    if (
+      (request.headers['x-sync-secret'] ?? '') !== options.searchEnv.syncSecret ||
+      !options.searchEnv.syncSecret
+    ) {
       reply.code(401);
       return { error: 'Unauthorized.' };
     }
@@ -592,24 +639,30 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
 
     const created: string[] = [];
     for (const topic of PRODUCT_WEBHOOK_TOPICS) {
-      const response = await fetch(`https://${options.searchEnv.shopifyStoreDomain}/admin/api/2024-10/webhooks.json`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': options.searchEnv.shopifyAdminToken,
-        },
-        body: JSON.stringify({
-          webhook: {
-            topic,
-            address: webhookAddress,
-            format: 'json',
+      const response = await fetch(
+        `https://${options.searchEnv.shopifyStoreDomain}/admin/api/2024-10/webhooks.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': options.searchEnv.shopifyAdminToken,
           },
-        }),
-      });
+          body: JSON.stringify({
+            webhook: {
+              topic,
+              address: webhookAddress,
+              format: 'json',
+            },
+          }),
+        },
+      );
 
       if (!response.ok) {
         const body = await response.text();
-        request.log.warn({ topic, status: response.status, body }, 'Failed to register Shopify webhook');
+        request.log.warn(
+          { topic, status: response.status, body },
+          'Failed to register Shopify webhook',
+        );
         continue;
       }
 
@@ -623,4 +676,3 @@ export const searchRoutes: FastifyPluginAsync<SearchRoutesOptions> = async (fast
     };
   });
 };
-

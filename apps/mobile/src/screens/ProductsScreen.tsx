@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
 import { AnimatedEntrance, CollapsibleFilterPanel, SemanticPill } from '../components/UXComponents';
@@ -104,7 +104,7 @@ export const ProductsScreen = ({
 
         <View style={styles.catalogHeroActionsRow}>
           <TouchableOpacity style={styles.catalogActionPill} onPress={onCycleSort}>
-            <MaterialCommunityIcons name="sort" size={15} color={colors.brandRed} />
+            <Ionicons name="swap-vertical-outline" size={16} color={colors.brandRed} />
             <Text style={styles.catalogActionPillText}>Sortare: {sortLabel}</Text>
           </TouchableOpacity>
 
@@ -112,9 +112,9 @@ export const ProductsScreen = ({
             style={[styles.catalogActionPill, onlyFavorites && styles.catalogActionPillActive]}
             onPress={onToggleFavorites}
           >
-            <MaterialCommunityIcons
+            <Ionicons
               name={onlyFavorites ? 'heart' : 'heart-outline'}
-              size={15}
+              size={16}
               color={onlyFavorites ? '#FFFFFF' : colors.brandRed}
             />
             <Text
@@ -128,7 +128,7 @@ export const ProductsScreen = ({
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.catalogActionPill} onPress={onResetFilters}>
-            <MaterialCommunityIcons name="filter-off-outline" size={15} color={colors.brandRed} />
+            <Ionicons name="refresh-outline" size={16} color={colors.brandRed} />
             <Text style={styles.catalogActionPillText}>Resetează filtre</Text>
           </TouchableOpacity>
         </View>

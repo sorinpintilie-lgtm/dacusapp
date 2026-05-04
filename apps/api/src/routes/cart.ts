@@ -502,7 +502,20 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
         return { error: 'Unauthorized.' };
       }
 
-      const body = (request.body ?? {}) as { currency?: string; addressId?: string };
+      const body = (request.body ?? {}) as {
+        currency?: string;
+        addressId?: string;
+        address?: {
+          fullName?: string;
+          phone?: string;
+          line1?: string;
+          line2?: string;
+          city?: string;
+          county?: string;
+          postalCode?: string;
+          countryCode?: string;
+        };
+      };
       const currency = (body.currency ?? 'RON').toUpperCase();
       const lines = await store.getCart(sessionCtx.user.id);
 
@@ -520,13 +533,39 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
         ? addresses.find((item) => item.id === selectedAddressId)
         : undefined;
 
-      if (!selectedAddress) {
+      const inlineAddress = body.address;
+      const hasInlineAddress = Boolean(
+        inlineAddress?.fullName?.trim() &&
+        inlineAddress?.phone?.trim() &&
+        inlineAddress?.line1?.trim() &&
+        inlineAddress?.city?.trim() &&
+        inlineAddress?.county?.trim() &&
+        inlineAddress?.postalCode?.trim(),
+      );
+
+      if (!selectedAddress && !hasInlineAddress) {
         reply.code(400);
         return {
           error: 'A shipping address is required before checkout.',
-          errorRo: 'Selectează o adresă de livrare înainte de checkout.',
+          errorRo: 'Completează toate câmpurile pentru adresa de livrare.',
+          requiresAddress: true,
         };
       }
+
+      const checkoutAddress = selectedAddress ?? {
+        id: `inline-${Date.now()}`,
+        label: 'Livrare',
+        fullName: inlineAddress?.fullName ?? '',
+        phone: inlineAddress?.phone ?? '',
+        line1: inlineAddress?.line1 ?? '',
+        line2: inlineAddress?.line2,
+        city: inlineAddress?.city ?? '',
+        county: inlineAddress?.county ?? '',
+        postalCode: inlineAddress?.postalCode ?? '',
+        countryCode: (inlineAddress?.countryCode ?? 'RO').toUpperCase(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
 
       let validation: ResolvedCartPayload;
       try {
@@ -565,11 +604,11 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
               })),
               attributes: [
                 { key: 'dacus_user_id', value: sessionCtx.user.id },
-                { key: 'dacus_address_id', value: selectedAddress.id },
+                { key: 'dacus_address_id', value: checkoutAddress.id },
               ],
               buyerIdentity: {
                 email: sessionCtx.user.email,
-                countryCode: selectedAddress.countryCode,
+                countryCode: checkoutAddress.countryCode,
               },
             },
           },
@@ -605,7 +644,7 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
         trackingCode: `TRK-${randomBytes(4).toString('hex').toUpperCase()}`,
         checkoutUrl,
         ...(externalCheckoutId ? { externalCheckoutId } : {}),
-        addressId: selectedAddress.id,
+        addressId: checkoutAddress.id,
         createdAt: new Date().toISOString(),
       };
 

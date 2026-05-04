@@ -10,8 +10,8 @@ import {
   Image,
   type ViewToken,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+import { Ionicons } from '@expo/vector-icons';
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 import { colors, spacing, typography, radii } from '../theme/tokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -32,14 +32,14 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
     id: '1',
     title: 'Bine ai venit la Dacus',
     subtitle: 'Descoperă cele mai bune scule, echipamente și consumabile pentru proiectele tale.',
-    icon: 'hammer-wrench',
+    icon: 'construct-outline',
     iconColor: colors.brandRed,
   },
   {
     id: '2',
     title: 'Comenzi rapide',
     subtitle: 'Adaugă produse în coș cu un singur tap. Comandă și primește livrare în 24-48 ore.',
-    icon: 'cart-check',
+    icon: 'cart-outline',
     iconColor: colors.success,
   },
   {
@@ -47,7 +47,7 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
     title: 'Program de fidelitate',
     subtitle:
       'Acumulează puncte pentru fiecare comandă și rabdă vouchere valoroase. Fii Silver sau Gold!',
-    icon: 'medal',
+    icon: 'award-outline',
     iconColor: colors.brandAmber,
   },
   {
@@ -55,7 +55,7 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
     title: 'Scanare în magazin',
     subtitle:
       'Folosește codul QR din aplicație pentru a câștiga puncte și la cumpărăturile din magazin.',
-    icon: 'qrcode-scan',
+    icon: 'qr-code-outline',
     iconColor: colors.info,
   },
 ];
@@ -95,7 +95,7 @@ export function OnboardingScreen({ onComplete, onSkip }: OnboardingScreenProps) 
           { backgroundColor: `${item.iconColor ?? colors.brandRed}15` },
         ]}
       >
-        <MaterialCommunityIcons
+        <Ionicons
           name={item.icon as IconName}
           size={80}
           color={item.iconColor ?? colors.brandRed}
@@ -152,7 +152,7 @@ export function OnboardingScreen({ onComplete, onSkip }: OnboardingScreenProps) 
           {currentIndex === ONBOARDING_SLIDES.length - 1 ? 'Începe acum' : 'Următorul'}
         </Text>
         {currentIndex < ONBOARDING_SLIDES.length - 1 && (
-          <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+          <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         )}
       </TouchableOpacity>
     </View>

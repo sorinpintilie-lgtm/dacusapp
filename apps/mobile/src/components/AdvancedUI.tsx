@@ -10,9 +10,10 @@ import {
   Dimensions,
   Modal,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radii, spacing } from '../theme/tokens';
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -43,7 +44,7 @@ export function TabBar({
             onPress={() => onTabPress(tab.key)}
           >
             <View style={styles.tabIconContainer}>
-              <MaterialCommunityIcons
+              <Ionicons
                 name={tab.icon as IconName}
                 size={24}
                 color={isActive ? colors.brandRed : colors.textSecondary}
@@ -60,7 +61,7 @@ export function TabBar({
       })}
       {onCartPress && (
         <TouchableOpacity style={styles.tabCart} onPress={onCartPress}>
-          <MaterialCommunityIcons name="cart" size={24} color={colors.textSecondary} />
+          <Ionicons name="cart-outline" size={24} color={colors.textSecondary} />
           {cartCount > 0 && (
             <View style={styles.tabCartBadge}>
               <Text style={styles.tabCartBadgeText}>{cartCount > 99 ? '99+' : cartCount}</Text>
@@ -101,7 +102,7 @@ export function SearchWithSuggestions({
     <View style={styles.searchContainer}>
       <View style={styles.searchInputWrapper}>
         <View style={styles.searchIconBox}>
-          <MaterialCommunityIcons name="magnify" size={20} color={colors.textSecondary} />
+          <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
         </View>
         <TextInput
           style={styles.searchTextInput}
@@ -115,7 +116,7 @@ export function SearchWithSuggestions({
         />
         {value.length > 0 && (
           <TouchableOpacity onPress={() => onChangeText('')} style={styles.searchClear}>
-            <MaterialCommunityIcons name="close-circle" size={18} color={colors.textSecondary} />
+            <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -131,7 +132,7 @@ export function SearchWithSuggestions({
                   style={styles.searchItem}
                   onPress={() => onRecentPress?.(item)}
                 >
-                  <MaterialCommunityIcons name="history" size={16} color={colors.textSecondary} />
+                  <Ionicons name="time-outline" size={16} color={colors.textSecondary} />
                   <Text style={styles.searchItemText}>{item}</Text>
                 </TouchableOpacity>
               ))}
@@ -146,7 +147,7 @@ export function SearchWithSuggestions({
                   style={styles.searchItem}
                   onPress={() => onSuggestionPress?.(item)}
                 >
-                  <MaterialCommunityIcons name="magnify" size={16} color={colors.textSecondary} />
+                  <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
                   <Text style={styles.searchItemText}>{item}</Text>
                 </TouchableOpacity>
               ))}
@@ -202,7 +203,7 @@ export function BottomSheet({
             <View style={styles.bottomSheetHeader}>
               <Text style={styles.bottomSheetTitle}>{title}</Text>
               <TouchableOpacity onPress={onClose}>
-                <MaterialCommunityIcons name="close" size={24} color={colors.textPrimary} />
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
             </View>
           )}
@@ -241,8 +242,8 @@ export function QuantitySelector({
         onPress={decrease}
         disabled={value <= min}
       >
-        <MaterialCommunityIcons
-          name="minus"
+        <Ionicons
+          name="remove"
           size={16}
           color={value <= min ? colors.border : colors.textPrimary}
         />
@@ -255,11 +256,7 @@ export function QuantitySelector({
         onPress={increase}
         disabled={value >= max}
       >
-        <MaterialCommunityIcons
-          name="plus"
-          size={16}
-          color={value >= max ? colors.border : colors.textPrimary}
-        />
+        <Ionicons name="plus" size={16} color={value >= max ? colors.border : colors.textPrimary} />
       </TouchableOpacity>
     </View>
   );
@@ -288,7 +285,7 @@ export function CheckoutProgress({
               ]}
             >
               {step.completed ? (
-                <MaterialCommunityIcons name="check" size={12} color={colors.surface} />
+                <Ionicons name="checkmark" size={12} color={colors.surface} />
               ) : (
                 <Text style={styles.progressDotText}>{index + 1}</Text>
               )}
@@ -336,7 +333,7 @@ export function ProductImageGallery({
         activeOpacity={0.9}
       >
         <View style={styles.imagePlaceholder}>
-          <MaterialCommunityIcons name="image" size={48} color={colors.border} />
+          <Ionicons name="image-outline" size={48} color={colors.border} />
         </View>
       </TouchableOpacity>
 
@@ -363,7 +360,7 @@ export function ProductImageGallery({
       <Modal visible={expanded} transparent animationType="fade">
         <View style={styles.imageExpanded}>
           <TouchableOpacity style={styles.imageExpandedClose} onPress={() => setExpanded(false)}>
-            <MaterialCommunityIcons name="close" size={24} color={colors.surface} />
+            <Ionicons name="close" size={24} color={colors.surface} />
           </TouchableOpacity>
           <View style={styles.imageExpandedContent}>
             <View style={styles.imageExpandedPlaceholder} />
@@ -409,8 +406,8 @@ export function AddressCard({
     >
       <View style={styles.addressCardHeader}>
         <View style={styles.addressCardTitle}>
-          <MaterialCommunityIcons
-            name="map-marker"
+          <Ionicons
+            name="location-outline"
             size={18}
             color={isSelected ? colors.brandRed : colors.textSecondary}
           />
@@ -435,7 +432,7 @@ export function AddressCard({
       </Text>
       {isSelected && (
         <View style={styles.addressCheck}>
-          <MaterialCommunityIcons name="check-circle" size={20} color={colors.brandRed} />
+          <Ionicons name="checkmark-circle" size={20} color={colors.brandRed} />
         </View>
       )}
     </TouchableOpacity>
@@ -500,13 +497,13 @@ export function PriceRangeSlider({
           style={styles.priceSliderButton}
           onPress={() => handleMinChange(Math.max(min, localMin - 200))}
         >
-          <MaterialCommunityIcons name="minus" size={16} color={colors.textPrimary} />
+          <Ionicons name="remove" size={16} color={colors.textPrimary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.priceSliderButton}
           onPress={() => handleMaxChange(Math.min(max, localMax + 200))}
         >
-          <MaterialCommunityIcons name="plus" size={16} color={colors.textPrimary} />
+          <Ionicons name="add" size={16} color={colors.textPrimary} />
         </TouchableOpacity>
       </View>
     </View>
@@ -547,7 +544,7 @@ export function WishlistButton({
   return (
     <TouchableOpacity onPress={handlePress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
       <Animated.View style={{ transform: [{ scale }] }}>
-        <MaterialCommunityIcons
+        <Ionicons
           name={isWishlisted ? 'heart' : 'heart-outline'}
           size={size}
           color={isWishlisted ? colors.brandRed : colors.textSecondary}
@@ -587,7 +584,7 @@ export function PullToRefresh({ refreshing }: { refreshing: boolean }) {
   return (
     <View style={styles.pullToRefresh}>
       <Animated.View style={{ transform: [{ rotate: spin }] }}>
-        <MaterialCommunityIcons name="refresh" size={24} color={colors.brandRed} />
+        <Ionicons name="refresh-outline" size={24} color={colors.brandRed} />
       </Animated.View>
     </View>
   );

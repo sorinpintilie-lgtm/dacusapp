@@ -9,7 +9,8 @@ import {
 } from '../services/storefront';
 import { buildProductIndexes } from '../utils/catalogFilters';
 
-const CATALOG_CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const CATALOG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours (once per day at 2 AM)
+const INITIAL_PAGE_SIZE = 250;
 
 type CatalogState = {
   categories: CatalogCategory[];
@@ -110,7 +111,7 @@ export const useCatalog = (): CatalogState => {
                 `Catalog live: ${params.seedProducts.length + loadedTotal} produse încărcate.`,
               );
             },
-            { pageSize: 80, leanQuery: true },
+            { pageSize: 150, leanQuery: true },
           );
 
           if (!active) return;
@@ -171,27 +172,34 @@ export const useCatalog = (): CatalogState => {
       }
 
       try {
-        const cacheAgeMs = cachedEntry
-          ? Math.max(0, now - cachedEntry.cachedAt)
+        const lastCheckedAt = cachedEntry?.lastCheckedAt ?? 0;
+        const timeSinceLastCheckMs = lastCheckedAt
+          ? Math.max(0, now - lastCheckedAt)
           : Number.POSITIVE_INFINITY;
-        const cacheIsFreshEnough = cacheAgeMs <= CATALOG_CACHE_MAX_AGE_MS;
-        const stampPayload = cachedEntry ? await loadCatalogStamp() : null;
+        const hasCheckedToday = timeSinceLastCheckMs <= CATALOG_CACHE_MAX_AGE_MS;
+
+        let stampPayload: { stamp: string } | null = null;
+        try {
+          stampPayload = await loadCatalogStamp();
+        } catch {
+          console.warn('[BOOT][useCatalog] stamp fetch failed, using fallback logic');
+        }
+
         const stampMatchesCache =
           !!cachedEntry &&
           typeof cachedEntry.stamp === 'string' &&
           cachedEntry.stamp.length > 0 &&
           stampPayload?.stamp === cachedEntry.stamp;
         const canSkipRefresh =
-          !!cachedEntry &&
-          ((stampMatchesCache && cacheIsFreshEnough) || (!stampPayload && cacheIsFreshEnough));
+          !!cachedEntry && hasCheckedToday && (stampMatchesCache || !stampPayload);
 
         if (canSkipRefresh) {
           if (cached) {
-            const freshnessMins = Math.max(1, Math.round(cacheAgeMs / 60_000));
+            const freshnessHours = Math.max(1, Math.round(timeSinceLastCheckMs / 3600000));
             setCatalogMeta(
               stampMatchesCache
-                ? `Catalog cache: validat în fundal (${cached.products.length} produse, actualizat acum ~${freshnessMins} min).`
-                : `Catalog cache: folosit rapid (${cached.products.length} produse). Verificare live amânată.`,
+                ? `Catalog actualizat azi (${cached.products.length} produse).`
+                : `Catalog din cache (${cached.products.length} produse). Următorul update mâine la 2 AM.`,
             );
 
             if (cached.hasMoreProducts && cached.productsCursor) {
@@ -208,7 +216,7 @@ export const useCatalog = (): CatalogState => {
         }
 
         const live = await loadLiveCatalog({
-          pageSize: 60,
+          pageSize: INITIAL_PAGE_SIZE,
           leanQuery: true,
           includeCategories: true,
         });

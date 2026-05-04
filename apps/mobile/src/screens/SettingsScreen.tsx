@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import { Ionicons } from '@expo/vector-icons';
 import { Skeleton } from '../components/Skeleton';
 import type { AccountSettings, AccountSettingsPatch } from '../services/commerce';
+import { fixRomanianMojibake } from '../utils/string';
 import type { ScreenStyles } from './screenTypes';
+import { colors, spacing } from '../theme/tokens';
 
 type SettingsScreenProps = {
   styles: ScreenStyles;
@@ -129,6 +132,7 @@ export const SettingsScreen = ({
     () => [styles.bodyMuted, statusTone === 'error' ? styles.errorText : null],
     [statusTone, styles.bodyMuted, styles.errorText],
   );
+  const normalizedStatusMessage = statusMessage ? fixRomanianMojibake(statusMessage) : null;
 
   if (isLoading) {
     return (
@@ -152,11 +156,16 @@ export const SettingsScreen = ({
             <Text style={styles.secondaryButtonText}>Autentificare pentru sincronizare server</Text>
           </TouchableOpacity>
         ) : null}
-        {statusMessage ? <Text style={statusStyle}>{statusMessage}</Text> : null}
+        {normalizedStatusMessage ? (
+          <Text style={statusStyle}>{normalizedStatusMessage}</Text>
+        ) : null}
       </View>
 
       <View style={styles.cardPlain}>
-        <Text style={styles.sectionLabel}>Profile</Text>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="person-outline" size={18} color={colors.brandBlue} />
+          <Text style={styles.sectionLabel}>Profile</Text>
+        </View>
         <Text style={styles.bodyMuted}>Nume afisat si limba preferata.</Text>
         <TextInput
           style={styles.addressInput}
@@ -185,7 +194,10 @@ export const SettingsScreen = ({
       </View>
 
       <View style={styles.cardPlain}>
-        <Text style={styles.sectionLabel}>Notifications</Text>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="notifications-outline" size={18} color={colors.brandAmber} />
+          <Text style={styles.sectionLabel}>Notifications</Text>
+        </View>
 
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
@@ -291,7 +303,10 @@ export const SettingsScreen = ({
       </View>
 
       <View style={styles.cardPlain}>
-        <Text style={styles.sectionLabel}>Privacy</Text>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="shield-outline" size={18} color={colors.brandBlue} />
+          <Text style={styles.sectionLabel}>Privacy</Text>
+        </View>
 
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
@@ -402,7 +417,10 @@ export const SettingsScreen = ({
       </View>
 
       <View style={styles.cardPlain}>
-        <Text style={styles.sectionLabel}>Security</Text>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="lock-closed-outline" size={18} color={colors.brandRed} />
+          <Text style={styles.sectionLabel}>Security</Text>
+        </View>
 
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
@@ -509,23 +527,34 @@ export const SettingsScreen = ({
       </View>
 
       <View style={styles.cardPlain}>
-        <Text style={styles.sectionLabel}>Sessions</Text>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="desktop-outline" size={18} color={colors.brandBlue} />
+          <Text style={styles.sectionLabel}>Sessions</Text>
+        </View>
         <Text style={styles.bodyMuted}>
           Gestioneaza dispozitivele conectate si sesiunea curenta.
         </Text>
         <View style={styles.accountInlineActions}>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={[
+              styles.secondaryButton,
+              { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+            ]}
             onPress={onOpenSessions}
             disabled={!isAuthenticated}
           >
+            <Ionicons name="eye-outline" size={16} color={colors.brandBlue} />
             <Text style={styles.secondaryButtonText}>Vezi sesiuni active</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={[
+              styles.secondaryButton,
+              { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+            ]}
             onPress={onLogout}
             disabled={!isAuthenticated}
           >
+            <Ionicons name="log-out-outline" size={16} color={colors.brandRed} />
             <Text style={styles.secondaryButtonText}>Deconectare</Text>
           </TouchableOpacity>
         </View>

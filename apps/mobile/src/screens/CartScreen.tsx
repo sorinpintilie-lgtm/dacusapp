@@ -1,12 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
 
-import type { CatalogProduct } from '../data/catalog';
-import { AnimatedEntrance } from '../components/UXComponents';
-import { EmptyCartState } from '../components/EmptyStates';
-import { InlineError } from '../components/ErrorHandling';
-import { Skeleton } from '../components/Skeleton';
-import type { Address, CartLine } from '../services/commerce';
-import { formatPrice } from '../utils/catalogFilters';
+import { colors, spacing } from '../theme/tokens';
 import type { ScreenStyles } from './screenTypes';
 
 type CartItem = CartLine & {
@@ -64,20 +59,27 @@ export const CartScreen = ({
 
       <AnimatedEntrance>
         <View style={styles.cartCheckoutCard}>
-          <Text style={styles.sectionLabel}>Finalizează comanda</Text>
+          <View style={styles.sectionHeadRow}>
+            <Ionicons name="cart-outline" size={18} color={colors.brandRed} />
+            <Text style={styles.sectionLabel}>Finalizează comanda</Text>
+          </View>
           <Text style={styles.bodyMuted}>{cartCount} produse în coș</Text>
           <View style={styles.totalBox}>
             <Text style={styles.totalLabel}>Total de plată</Text>
             <Text style={styles.totalValue}>{formatPrice(cartTotal)}</Text>
           </View>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[
+              styles.primaryButton,
+              { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+            ]}
             activeOpacity={0.92}
             onPress={onCheckout}
             disabled={checkoutBusy}
           >
+            <Ionicons name="lock-closed-outline" size={16} color="#FFFFFF" />
             <Text style={styles.primaryButtonText}>
-              {checkoutBusy ? 'Se validează coșul...' : 'Finalizează comanda'}
+              {checkoutBusy ? 'Se validează coșul...' : 'Continuă la plată'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -85,7 +87,10 @@ export const CartScreen = ({
 
       <AnimatedEntrance delay={40}>
         <View style={styles.cardPlain}>
-          <Text style={styles.sectionLabel}>Adresă de livrare</Text>
+          <View style={styles.sectionHeadRow}>
+            <Ionicons name="location-outline" size={18} color={colors.brandBlue} />
+            <Text style={styles.sectionLabel}>Adresă de livrare</Text>
+          </View>
           <Text style={styles.bodyMuted}>{deliveryEtaLabel}</Text>
           {selectedAddress ? (
             <>
@@ -149,10 +154,10 @@ export const CartScreen = ({
                 )}
                 <View style={styles.productInfo}>
                   <Text style={styles.productName} numberOfLines={2}>
-                    {line.product.name}
+                    {fixRomanianMojibake(line.product.name)}
                   </Text>
                   {line.variantName ? (
-                    <Text style={styles.productSku}>{line.variantName}</Text>
+                    <Text style={styles.productSku}>{fixRomanianMojibake(line.variantName)}</Text>
                   ) : null}
                   <Text style={styles.productPrice}>{formatPrice(line.unitPriceRon)}</Text>
                   <Text style={styles.bodyMuted}>
@@ -166,19 +171,20 @@ export const CartScreen = ({
                       style={styles.qtyButton}
                       onPress={() => onChangeQuantity(line.productId, line.variantId, -1)}
                     >
-                      <Text style={styles.qtyText}>-</Text>
+                      <Ionicons name="remove" size={18} color={colors.textPrimary} />
                     </TouchableOpacity>
                     <Text style={styles.qtyValue}>{line.quantity}</Text>
                     <TouchableOpacity
                       style={styles.qtyButton}
                       onPress={() => onChangeQuantity(line.productId, line.variantId, 1)}
                     >
-                      <Text style={styles.qtyText}>+</Text>
+                      <Ionicons name="add" size={18} color={colors.textPrimary} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.qtyRemoveButton}
                       onPress={() => onRemoveLine(line.productId, line.variantId)}
                     >
+                      <Ionicons name="trash-outline" size={16} color={colors.brandRed} />
                       <Text style={styles.qtyRemoveText}>Elimină</Text>
                     </TouchableOpacity>
                   </View>

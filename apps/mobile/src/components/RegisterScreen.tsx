@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { colors, radii, spacing, typography } from '../theme/tokens';
+import { fixRomanianMojibake } from '../utils/string';
 
 type RegisterScreenProps = {
   email: string;
@@ -61,7 +62,9 @@ export function RegisterScreen({
     <View style={styles.stackLarge}>
       <View style={styles.cardPlain}>
         <Text style={styles.pageHeading}>Creează cont</Text>
-        <Text style={styles.bodyMuted}>Deschide un cont nou pentru a salva comenzile și punctele.</Text>
+        <Text style={styles.bodyMuted}>
+          Deschide un cont nou pentru a salva comenzile și punctele.
+        </Text>
 
         <View style={styles.stackSmall}>
           {step === 1 ? (
@@ -101,8 +104,14 @@ export function RegisterScreen({
               <Text style={styles.bodyMuted}>Alege brandurile preferate</Text>
               <View style={styles.prefWrap}>
                 {preferenceBrands.map((brand) => (
-                  <TouchableOpacity key={brand} style={styles.prefChip} onPress={() => onToggleBrand(brand)}>
-                    <Text style={styles.prefChipText}>{selectedBrands.includes(brand) ? `☑ ${brand}` : `☐ ${brand}`}</Text>
+                  <TouchableOpacity
+                    key={brand}
+                    style={styles.prefChip}
+                    onPress={() => onToggleBrand(brand)}
+                  >
+                    <Text style={styles.prefChipText}>
+                      {selectedBrands.includes(brand) ? `☑ ${brand}` : `☐ ${brand}`}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -110,26 +119,49 @@ export function RegisterScreen({
               <Text style={styles.bodyMuted}>Alege categoriile preferate</Text>
               <View style={styles.prefWrap}>
                 {preferenceCategories.slice(0, 8).map((category) => (
-                  <TouchableOpacity key={category.id} style={styles.prefChip} onPress={() => onToggleCategory(category.id)}>
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.prefChip}
+                    onPress={() => onToggleCategory(category.id)}
+                  >
                     <Text style={styles.prefChipText}>
-                      {selectedCategoryIds.includes(category.id) ? `☑ ${category.name}` : `☐ ${category.name}`}
+                      {selectedCategoryIds.includes(category.id)
+                        ? `☑ ${fixRomanianMojibake(category.name)}`
+                        : `☐ ${fixRomanianMojibake(category.name)}`}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               <TouchableOpacity style={styles.secondaryButton} onPress={onToggleMarketingOptIn}>
-                <Text style={styles.secondaryButtonText}>{marketingOptIn ? '☑' : '☐'} Oferte personalizate prin email</Text>
+                <Text style={styles.secondaryButtonText}>
+                  {marketingOptIn ? '☑' : '☐'} Oferte personalizate prin email
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => onToggleConsent('analytics')}>
-                <Text style={styles.secondaryButtonText}>{consentAnalytics ? '☑' : '☐'} Consimțământ analytics</Text>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => onToggleConsent('analytics')}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {consentAnalytics ? '☑' : '☐'} Consimțământ analytics
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => onToggleConsent('personalization')}>
-                <Text style={styles.secondaryButtonText}>{consentPersonalization ? '☑' : '☐'} Consimțământ personalizare</Text>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => onToggleConsent('personalization')}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {consentPersonalization ? '☑' : '☐'} Consimțământ personalizare
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => onToggleConsent('marketing')}>
-                <Text style={styles.secondaryButtonText}>{consentMarketing ? '☑' : '☐'} Consimțământ marketing</Text>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => onToggleConsent('marketing')}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {consentMarketing ? '☑' : '☐'} Consimțământ marketing
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -139,13 +171,23 @@ export function RegisterScreen({
 
         <View style={styles.stackSmall}>
           {step === 1 ? (
-            <TouchableOpacity style={[styles.primaryButton, busy && styles.buttonDisabled]} onPress={onNextStep} disabled={busy}>
+            <TouchableOpacity
+              style={[styles.primaryButton, busy && styles.buttonDisabled]}
+              onPress={onNextStep}
+              disabled={busy}
+            >
               <Text style={styles.primaryButtonText}>Continuă</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity style={[styles.primaryButton, busy && styles.buttonDisabled]} onPress={onRegister} disabled={busy}>
-                <Text style={styles.primaryButtonText}>{busy ? 'Se procesează...' : 'Creează cont'}</Text>
+              <TouchableOpacity
+                style={[styles.primaryButton, busy && styles.buttonDisabled]}
+                onPress={onRegister}
+                disabled={busy}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {busy ? 'Se procesează...' : 'Creează cont'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={onBackStep} disabled={busy}>
                 <Text style={styles.secondaryButtonText}>Înapoi</Text>

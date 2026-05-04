@@ -1,16 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Animated,
-  TextInput,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, TextInput } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, elevation, motion, radii, spacing } from '../theme/tokens';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 /**
  * Sticky bottom action bar for product pages
@@ -19,9 +12,9 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 export function StickyBottomBar({
   visible = true,
   price,
-  priceLabel = "Preț:",
-  buttonLabel = "Adaugă în coș",
-  buttonIcon = "cart-plus",
+  priceLabel = 'Preț:',
+  buttonLabel = 'Adaugă în coș',
+  buttonIcon = 'cart',
   onButtonPress,
   secondaryButtonLabel,
   onSecondaryPress,
@@ -31,7 +24,7 @@ export function StickyBottomBar({
   price?: string;
   priceLabel?: string;
   buttonLabel?: string;
-  buttonIcon?: string;
+  buttonIcon?: IconName;
   onButtonPress: () => void;
   secondaryButtonLabel?: string;
   onSecondaryPress?: () => void;
@@ -49,12 +42,7 @@ export function StickyBottomBar({
   }, [visible, translateY]);
 
   return (
-    <Animated.View 
-      style={[
-        styles.stickyBottomBar, 
-        { transform: [{ translateY }] }
-      ]}
-    >
+    <Animated.View style={[styles.stickyBottomBar, { transform: [{ translateY }] }]}>
       {price && (
         <View style={styles.stickyPriceContainer}>
           <Text style={styles.stickyPriceLabel}>{priceLabel}</Text>
@@ -63,30 +51,16 @@ export function StickyBottomBar({
       )}
       <View style={styles.stickyButtons}>
         {secondaryButtonLabel && onSecondaryPress && (
-          <TouchableOpacity 
-            style={styles.stickySecondaryButton}
-            onPress={onSecondaryPress}
-          >
-            <MaterialCommunityIcons 
-              name="heart-outline" 
-              size={20} 
-              color={colors.brandRed} 
-            />
+          <TouchableOpacity style={styles.stickySecondaryButton} onPress={onSecondaryPress}>
+            <Ionicons name="heart-outline" size={20} color={colors.brandRed} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity 
-          style={[
-            styles.stickyPrimaryButton,
-            loading && styles.stickyPrimaryButtonLoading,
-          ]}
+        <TouchableOpacity
+          style={[styles.stickyPrimaryButton, loading && styles.stickyPrimaryButtonLoading]}
           onPress={onButtonPress}
           disabled={loading}
         >
-            <MaterialCommunityIcons 
-              name={buttonIcon as IconName} 
-              size={20} 
-              color={colors.surface} 
-            />
+          <Ionicons name={buttonIcon as IconName} size={20} color={colors.surface} />
           <Text style={styles.stickyPrimaryButtonText}>
             {loading ? 'Se adaugă...' : buttonLabel}
           </Text>
@@ -102,7 +76,7 @@ export function StickyBottomBar({
 export function CollapsibleFilterPanel({
   children,
   filterCount = 0,
-  title = "Filtre",
+  title = 'Filtre',
 }: {
   children: React.ReactNode;
   filterCount?: number;
@@ -131,21 +105,18 @@ export function CollapsibleFilterPanel({
 
   return (
     <View style={styles.collapsibleFilter}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.collapsibleHeader}
         onPress={toggleExpanded}
         activeOpacity={0.7}
       >
         <View style={styles.collapsibleHeaderLeft}>
-          <MaterialCommunityIcons 
-            name="filter-variant" 
-            size={18} 
-            color={filterCount > 0 ? colors.brandRed : colors.textSecondary} 
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={filterCount > 0 ? colors.brandRed : colors.textSecondary}
           />
-          <Text style={[
-            styles.collapsibleTitle,
-            filterCount > 0 && styles.collapsibleTitleActive,
-          ]}>
+          <Text style={[styles.collapsibleTitle, filterCount > 0 && styles.collapsibleTitleActive]}>
             {title}
           </Text>
           {filterCount > 0 && (
@@ -154,18 +125,14 @@ export function CollapsibleFilterPanel({
             </View>
           )}
         </View>
-        <MaterialCommunityIcons 
-          name={expanded ? 'chevron-up' : 'chevron-down'} 
-          size={20} 
-          color={colors.textSecondary} 
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color={colors.textSecondary}
         />
       </TouchableOpacity>
-      
-      {expanded && (
-        <Animated.View style={styles.collapsibleContent}>
-          {children}
-        </Animated.View>
-      )}
+
+      {expanded && <Animated.View style={styles.collapsibleContent}>{children}</Animated.View>}
     </View>
   );
 }
@@ -176,7 +143,7 @@ export function CollapsibleFilterPanel({
 export function SearchHeader({
   value,
   onChangeText,
-  placeholder = "Caută produse...",
+  placeholder = 'Caută produse...',
   onFocus,
   onBlur,
   onSubmit,
@@ -195,11 +162,7 @@ export function SearchHeader({
   return (
     <View style={styles.searchHeader}>
       <View style={styles.searchInputContainer}>
-        <MaterialCommunityIcons 
-          name="magnify" 
-          size={20} 
-          color={colors.textSecondary} 
-        />
+        <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
         <TextInput
           style={styles.searchInput}
           value={value}
@@ -213,15 +176,11 @@ export function SearchHeader({
           autoFocus={autoFocus}
         />
         {showClearButton && value.length > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => onChangeText('')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <MaterialCommunityIcons 
-              name="close-circle" 
-              size={18} 
-              color={colors.textSecondary} 
-            />
+            <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
@@ -263,21 +222,11 @@ export function FloatingCartButton({
 
   return (
     <Animated.View style={[styles.floatingCart, { transform: [{ scale: scaleAnim }] }]}>
-      <TouchableOpacity 
-        style={styles.floatingCartButton}
-        onPress={handlePress}
-        activeOpacity={0.9}
-      >
-        <MaterialCommunityIcons 
-          name="cart" 
-          size={24} 
-          color={colors.surface} 
-        />
+      <TouchableOpacity style={styles.floatingCartButton} onPress={handlePress} activeOpacity={0.9}>
+        <Ionicons name="cart" size={24} color={colors.surface} />
         {itemCount > 0 && (
           <View style={styles.floatingCartBadge}>
-            <Text style={styles.floatingCartBadgeText}>
-              {itemCount > 99 ? '99+' : itemCount}
-            </Text>
+            <Text style={styles.floatingCartBadgeText}>{itemCount > 99 ? '99+' : itemCount}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -291,7 +240,7 @@ export function FloatingCartButton({
 export function SectionHeader({
   title,
   subtitle,
-  actionLabel = "Vezi toate",
+  actionLabel = 'Vezi toate',
   onAction,
 }: {
   title: string;
@@ -303,22 +252,16 @@ export function SectionHeader({
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderText}>
         <Text style={styles.sectionHeaderTitle}>{title}</Text>
-        {subtitle && (
-          <Text style={styles.sectionHeaderSubtitle}>{subtitle}</Text>
-        )}
+        {subtitle && <Text style={styles.sectionHeaderSubtitle}>{subtitle}</Text>}
       </View>
       {onAction && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.sectionHeaderAction}
           onPress={onAction}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Text style={styles.sectionHeaderActionText}>{actionLabel}</Text>
-          <MaterialCommunityIcons 
-            name="chevron-right" 
-            size={18} 
-            color={colors.brandRed} 
-          />
+          <Ionicons name="chevron-forward" size={18} color={colors.brandRed} />
         </TouchableOpacity>
       )}
     </View>
@@ -335,41 +278,36 @@ export function QuickActionCard({
   onPress,
   variant = 'default',
 }: {
-  icon: string;
+  icon: IconName;
   title: string;
   subtitle: string;
   onPress: () => void;
   variant?: 'default' | 'accent';
 }) {
   return (
-    <TouchableOpacity 
-      style={[
-        styles.quickActionCard,
-        variant === 'accent' && styles.quickActionCardAccent,
-      ]}
+    <TouchableOpacity
+      style={[styles.quickActionCard, variant === 'accent' && styles.quickActionCardAccent]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={[
-        styles.quickActionIcon,
-        variant === 'accent' && styles.quickActionIconAccent,
-      ]}>
-        <MaterialCommunityIcons 
-          name={icon as IconName} 
-          size={24} 
-          color={variant === 'accent' ? colors.surface : colors.brandRed} 
+      <View style={[styles.quickActionIcon, variant === 'accent' && styles.quickActionIconAccent]}>
+        <Ionicons
+          name={icon}
+          size={24}
+          color={variant === 'accent' ? colors.surface : colors.brandRed}
         />
       </View>
-      <Text style={[
-        styles.quickActionTitle,
-        variant === 'accent' && styles.quickActionTitleAccent,
-      ]}>
+      <Text
+        style={[styles.quickActionTitle, variant === 'accent' && styles.quickActionTitleAccent]}
+      >
         {title}
       </Text>
-      <Text style={[
-        styles.quickActionSubtitle,
-        variant === 'accent' && styles.quickActionSubtitleAccent,
-      ]}>
+      <Text
+        style={[
+          styles.quickActionSubtitle,
+          variant === 'accent' && styles.quickActionSubtitleAccent,
+        ]}
+      >
         {subtitle}
       </Text>
     </TouchableOpacity>
@@ -408,13 +346,7 @@ export function ProductCountBadge({
 /**
  * Scroll to top button
  */
-export function ScrollToTopButton({
-  visible,
-  onPress,
-}: {
-  visible: boolean;
-  onPress: () => void;
-}) {
+export function ScrollToTopButton({ visible, onPress }: { visible: boolean; onPress: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
@@ -429,16 +361,8 @@ export function ScrollToTopButton({
 
   return (
     <Animated.View style={[styles.scrollToTop, { opacity: fadeAnim }]}>
-      <TouchableOpacity 
-        style={styles.scrollToTopButton}
-        onPress={onPress}
-        activeOpacity={0.8}
-      >
-        <MaterialCommunityIcons 
-          name="chevron-up" 
-          size={24} 
-          color={colors.surface} 
-        />
+      <TouchableOpacity style={styles.scrollToTopButton} onPress={onPress} activeOpacity={0.8}>
+        <Ionicons name="chevron-up" size={24} color={colors.surface} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -549,7 +473,7 @@ export function RichEmptyState({
   return (
     <View style={styles.richEmptyState}>
       <View style={styles.richEmptyIconWrap}>
-        <MaterialCommunityIcons name={icon as IconName} size={26} color={colors.brandRed} />
+        <Ionicons name={icon as IconName} size={26} color={colors.brandRed} />
       </View>
       <Text style={styles.richEmptyTitle}>{title}</Text>
       <Text style={styles.richEmptySubtitle}>{subtitle}</Text>
@@ -579,33 +503,20 @@ export function SwipeableCartItem({
     <View style={styles.swipeableContainer}>
       <View style={styles.swipeableActions}>
         {onFavorite && (
-          <TouchableOpacity 
-            style={styles.swipeableAction}
-            onPress={onFavorite}
-          >
-            <MaterialCommunityIcons 
-              name="heart" 
-              size={20} 
-              color={colors.surface} 
-            />
+          <TouchableOpacity style={styles.swipeableAction} onPress={onFavorite}>
+            <Ionicons name="heart" size={20} color={colors.surface} />
           </TouchableOpacity>
         )}
         {onDelete && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.swipeableAction, styles.swipeableActionDelete]}
             onPress={onDelete}
           >
-            <MaterialCommunityIcons 
-              name="delete" 
-              size={20} 
-              color={colors.surface} 
-            />
+            <Ionicons name="trash-outline" size={20} color={colors.surface} />
           </TouchableOpacity>
         )}
       </View>
-      <View style={styles.swipeableContent}>
-        {children}
-      </View>
+      <View style={styles.swipeableContent}>{children}</View>
     </View>
   );
 }

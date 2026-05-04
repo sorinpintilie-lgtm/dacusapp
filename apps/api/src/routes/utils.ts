@@ -1,6 +1,26 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import admin from 'firebase-admin';
+import type { Auth } from 'firebase-admin/auth';
 
 import type { CommerceStore } from '../services/commerceStore.js';
+
+let firebaseAuthInstance: Auth | null = null;
+
+export const initFirebaseAuth = (projectId: string, clientEmail: string, privateKey: string) => {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+      }),
+    });
+  }
+  firebaseAuthInstance = admin.auth();
+  return firebaseAuthInstance;
+};
+
+export const getFirebaseAuth = () => firebaseAuthInstance;
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -46,6 +66,7 @@ export type SessionContext = {
   token: string;
   session: { userId: string; createdAt: string };
   user: { id: string; email: string; name: string; createdAt: string; passwordHash?: string };
+  isFirebaseUser?: boolean;
 };
 
 export const getSessionContext = async (
@@ -54,6 +75,23 @@ export const getSessionContext = async (
 ): Promise<SessionContext | null> => {
   const token = parseSessionToken(headers);
   if (!token) return null;
+
+  const firebaseAuth = getFirebaseAuth();
+  if (firebaseAuth) {
+    try {
+      const decoded = await firebaseAuth.verifyIdToken(token);
+      const user = await store.getUserByEmail(decoded.email || '');
+      if (user) {
+        return {
+          token,
+          session: { userId: user.id, createdAt: new Date().toISOString() },
+          user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
+          isFirebaseUser: true,
+        };
+      }
+    } catch {}
+  }
+
   const session = await store.getSessionByToken(token);
   if (!session) return null;
   if (Date.now() - Date.parse(session.createdAt) > SESSION_MAX_AGE_MS) {

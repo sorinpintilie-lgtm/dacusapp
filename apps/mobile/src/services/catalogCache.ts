@@ -49,12 +49,14 @@ const CATALOG_CACHE_FILE = cacheRoot ? `${cacheRoot}catalog-cache-v1.json` : nul
 export type CatalogCacheEntry = {
   payload: LiveCatalogPayload;
   cachedAt: number;
+  lastCheckedAt: number;
   stamp: string | null;
 };
 
 type CatalogCacheRecordV2 = {
   version: 2;
   cachedAt: number;
+  lastCheckedAt: number;
   stamp: string | null;
   payload: LiveCatalogPayload;
 };
@@ -225,6 +227,8 @@ const isValidCatalogCacheRecordV2 = (value: unknown): value is CatalogCacheRecor
     candidate.version === 2 &&
     typeof candidate.cachedAt === 'number' &&
     Number.isFinite(candidate.cachedAt) &&
+    typeof candidate.lastCheckedAt === 'number' &&
+    Number.isFinite(candidate.lastCheckedAt) &&
     (typeof candidate.stamp === 'string' ||
       candidate.stamp === null ||
       typeof candidate.stamp === 'undefined') &&
@@ -250,6 +254,7 @@ export const readCatalogCacheEntry = async (): Promise<CatalogCacheEntry | null>
       return {
         payload: normalizedPayload,
         cachedAt: parsed.cachedAt,
+        lastCheckedAt: parsed.lastCheckedAt,
         stamp: parsed.stamp ?? null,
       };
     }
@@ -260,6 +265,7 @@ export const readCatalogCacheEntry = async (): Promise<CatalogCacheEntry | null>
       return {
         payload: normalizedPayload,
         cachedAt: 0,
+        lastCheckedAt: 0,
         stamp: null,
       };
     }
@@ -286,9 +292,11 @@ export const writeCatalogCache = async (
 
   try {
     const normalizedPayload = normalizeCatalogPayload(payload);
+    const now = Date.now();
     const record: CatalogCacheRecordV2 = {
       version: 2,
-      cachedAt: options?.cachedAt ?? Date.now(),
+      cachedAt: options?.cachedAt ?? now,
+      lastCheckedAt: now,
       stamp: options?.stamp ?? null,
       payload: normalizedPayload,
     };

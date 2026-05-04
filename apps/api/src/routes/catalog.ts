@@ -701,6 +701,20 @@ export const catalogRoutes: FastifyPluginAsync<CatalogRoutesOptions> = async (fa
     return ensureIncrementalSync();
   });
 
+  fastify.post('/catalog/refresh', async (_request, reply) => {
+    // Force refresh from Shopify, ignoring cache
+    try {
+      const result = await runFullSync();
+      return { ok: true, ...result };
+    } catch (error) {
+      reply.code(500);
+      return {
+        error: 'Refresh failed',
+        details: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
   fastify.post('/catalog/webhooks/products', async () => {
     // Webhook for product changes
     // For simplicity, trigger sync or update specific product

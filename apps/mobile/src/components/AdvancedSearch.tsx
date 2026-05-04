@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,25 @@ import {
   TouchableOpacity,
   FlatList,
   Animated,
+  Image,
+  ScrollView,
+  ActivityIndicator,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, typography, radii } from '../theme/tokens';
+import { fixRomanianMojibake } from '../utils/string';
 import { useDebouncedValue } from '../utils/useDebounce';
+import { formatPrice } from '../utils/catalogFilters';
+
+type SearchProductHit = {
+  id: string;
+  name: string;
+  brand: string;
+  priceRon: number;
+  stockLabel?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+};
 
 export type SearchHistoryItem = {
   id: string;
@@ -40,11 +55,13 @@ type AdvancedSearchProps = {
   savedSearches?: string[];
   recentFilters?: RecentFilterItem[];
   trendingSearches?: string[];
+  productResults?: SearchProductHit[];
   placeholder?: string;
   loading?: boolean;
   autoFocus?: boolean;
   onSaveSearch?: (query: string) => void;
   onSelectRecentFilter?: (filterId: string) => void;
+  onSelectProduct?: (productId: string) => void;
 };
 
 export function AdvancedSearch({
@@ -57,29 +74,17 @@ export function AdvancedSearch({
   savedSearches = [],
   recentFilters = [],
   trendingSearches = [],
+  productResults = [],
   placeholder = 'Caută produse, branduri, cod, SKU',
   loading = false,
   autoFocus = false,
   onSaveSearch,
   onSelectRecentFilter,
+  onSelectProduct,
 }: AdvancedSearchProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState(value);
   const debouncedValue = useDebouncedValue(localValue, 300);
-
-  const intentSuggestions = useMemo(() => {
-    const query = localValue.trim();
-    if (query.length < 2) return [] as string[];
-
-    const next = new Set<string>();
-    if (/\d{4,}/.test(query)) {
-      next.add(`Cod/SKU: ${query}`);
-    }
-    next.add(`${query} în stoc`);
-    next.add(`${query} promoții`);
-    next.add(`${query} livrare rapidă`);
-    return Array.from(next).slice(0, 4);
-  }, [localValue]);
 
   const showSuggestions =
     isFocused &&
@@ -87,14 +92,17 @@ export function AdvancedSearch({
       recentSearches.length > 0 ||
       savedSearches.length > 0 ||
       recentFilters.length > 0 ||
-      trendingSearches.length > 0);
+      trendingSearches.length > 0 ||
+      productResults.length > 0);
+
+  const showProductResults = isFocused && productResults.length > 0;
 
   // Sync external value changes
   useEffect(() => {
-    if (value !== localValue) {
+    if (!isFocused && value !== localValue) {
       setLocalValue(value);
     }
-  }, [localValue, value]);
+  }, [isFocused, localValue, value]);
 
   // Call onChangeText with debounced value
   useEffect(() => {
@@ -104,8 +112,14 @@ export function AdvancedSearch({
   }, [debouncedValue, onChangeText, value]);
 
   const handleClear = () => {
-    setLocalValue('');
-    onChangeText('');
+    const emptyValue = '';
+    setLocalValue(emptyValue);
+    onChangeText(emptyValue);
+    setIsFocused(false);
+  };
+
+  const handleDismiss = () => {
+    setIsFocused(false);
   };
 
   const handleSubmit = () => {
@@ -131,7 +145,7 @@ export function AdvancedSearch({
       style={styles.suggestionItem}
       onPress={() => handleSelectRecent(item)}
     >
-      <MaterialCommunityIcons name="history" size={18} color={colors.textSecondary} />
+      <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
       <Text style={styles.suggestionText}>{item}</Text>
     </TouchableOpacity>
   );
@@ -142,7 +156,7 @@ export function AdvancedSearch({
       style={styles.suggestionItem}
       onPress={() => handleSelectRecent(item)}
     >
-      <MaterialCommunityIcons name="trending-up" size={18} color={colors.brandAmber} />
+      <Ionicons name="trending-up" size={18} color={colors.brandAmber} />
       <Text style={styles.suggestionText}>{item}</Text>
     </TouchableOpacity>
   );
@@ -153,48 +167,85 @@ export function AdvancedSearch({
       style={styles.suggestionItem}
       onPress={() => handleSelectRecent(item)}
     >
-      <MaterialCommunityIcons name="magnify" size={18} color={colors.textSecondary} />
-      <Text style={styles.suggestionText}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  const renderIntentItem = ({ item, index }: { item: string; index: number }) => (
-    <TouchableOpacity key={`intent-${index}`} style={styles.suggestionItem} onPress={() => handleSelectRecent(item)}>
-      <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color={colors.info} />
+      <Ionicons name="search-outline" size={18} color={colors.textSecondary} />
       <Text style={styles.suggestionText}>{item}</Text>
     </TouchableOpacity>
   );
 
   const renderSavedSearchItem = ({ item, index }: { item: string; index: number }) => (
-    <TouchableOpacity key={`saved-${index}`} style={styles.suggestionItem} onPress={() => handleSelectRecent(item)}>
-      <MaterialCommunityIcons name="bookmark-outline" size={18} color={colors.brandRed} />
+    <TouchableOpacity
+      key={`saved-${index}`}
+      style={styles.suggestionItem}
+      onPress={() => handleSelectRecent(item)}
+    >
+      <Ionicons name="bookmark-outline" size={18} color={colors.brandRed} />
       <Text style={styles.suggestionText}>{item}</Text>
     </TouchableOpacity>
   );
 
   const renderRecentFilterItem = ({ item }: { item: RecentFilterItem }) => (
-    <TouchableOpacity key={item.id} style={styles.filterPill} onPress={() => onSelectRecentFilter?.(item.id)}>
-      <MaterialCommunityIcons name="tune-variant" size={14} color={colors.textSecondary} />
+    <TouchableOpacity
+      key={item.id}
+      style={styles.filterPill}
+      onPress={() => onSelectRecentFilter?.(item.id)}
+    >
+      <Ionicons name="options-outline" size={14} color={colors.textSecondary} />
       <Text style={styles.filterPillText}>{item.label}</Text>
     </TouchableOpacity>
   );
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <MaterialCommunityIcons name="magnify" size={48} color={colors.border} />
-      <Text style={styles.emptyText}>
-        {localValue.length >= 2
-          ? 'Nu am găsit sugestii pentru această căutare'
-          : 'Începe să tastezi pentru a vedea sugestii'}
-      </Text>
-    </View>
-  );
+  const renderProductResult = ({ item }: { item: SearchProductHit }) => {
+    const imageUrl = item.thumbnailUrl || item.imageUrl;
+    const hasImage = imageUrl && /^https?:\/\//.test(imageUrl);
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.productResultItem}
+        onPress={() => {
+          setIsFocused(false);
+          onSelectProduct?.(item.id);
+        }}
+      >
+        <View style={styles.productResultImageWrap}>
+          {hasImage ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.productResultImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.productResultImageFallback}>
+              <Text style={styles.productResultImageFallbackText}>?</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.productResultContent}>
+          <Text style={styles.productResultBrand} numberOfLines={1}>
+            {fixRomanianMojibake(item.brand)}
+          </Text>
+          <Text style={styles.productResultName} numberOfLines={2}>
+            {fixRomanianMojibake(item.name)}
+          </Text>
+          <View style={styles.productResultFooter}>
+            <Text style={styles.productResultStock} numberOfLines={1}>
+              {fixRomanianMojibake(item.stockLabel || '') || 'Verifică stoc'}
+            </Text>
+            <Text style={styles.productResultPrice}>{formatPrice(item.priceRon)}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
+      {isFocused && showSuggestions && (
+        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleDismiss} />
+      )}
       <View style={[styles.searchContainer, isFocused && styles.searchContainerFocused]}>
-        <MaterialCommunityIcons
-          name="magnify"
+        <Ionicons
+          name="search-outline"
           size={20}
           color={isFocused ? colors.brandRed : colors.textSecondary}
         />
@@ -203,7 +254,9 @@ export function AdvancedSearch({
           value={localValue}
           onChangeText={setLocalValue}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+          onBlur={() => {
+            // Keep dropdown visible after keyboard closes
+          }}
           onSubmitEditing={handleSubmit}
           placeholder={placeholder}
           placeholderTextColor={colors.textSecondary}
@@ -213,28 +266,45 @@ export function AdvancedSearch({
           autoCapitalize="none"
         />
         {loading && (
-          <Animated.View style={styles.loadingIndicator}>
-            <MaterialCommunityIcons name="loading" size={18} color={colors.brandRed} />
-          </Animated.View>
+          <View style={styles.loadingIndicator}>
+            <ActivityIndicator size="small" color={colors.brandRed} />
+          </View>
         )}
         {localValue.length > 0 && !loading && (
           <View style={styles.searchActions}>
             {onSaveSearch ? (
               <TouchableOpacity onPress={handleSaveSearch} style={styles.clearButton}>
-                <MaterialCommunityIcons name="bookmark-plus-outline" size={18} color={colors.brandRed} />
+                <Ionicons name="bookmark-outline" size={18} color={colors.brandRed} />
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
-              <MaterialCommunityIcons name="close-circle" size={18} color={colors.textSecondary} />
+              <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
         )}
       </View>
 
       {showSuggestions && (
-        <View style={styles.suggestionsContainer}>
-          {/* Recent Searches */}
-          {recentSearches.length > 0 && (
+        <ScrollView style={styles.suggestionsContainer} nestedScrollEnabled>
+          {localValue.trim().length >= 2 && loading && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Se caută...</Text>
+            </View>
+          )}
+
+          {showProductResults ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Produse găsite ({productResults.length})</Text>
+              {productResults.slice(0, 8).map((item) => renderProductResult({ item }))}
+            </View>
+          ) : localValue.trim().length >= 2 && !loading ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Nu au fost găsite produse</Text>
+              <Text style={styles.bodyMuted}>Încearcă alt termen de căutare</Text>
+            </View>
+          ) : null}
+
+          {localValue.length === 0 && recentSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Căutări recente</Text>
               <FlatList
@@ -246,8 +316,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {/* Saved searches */}
-          {savedSearches.length > 0 && (
+          {localValue.length === 0 && savedSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Căutări salvate</Text>
               <FlatList
@@ -259,8 +328,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {/* Recent filters */}
-          {recentFilters.length > 0 && (
+          {localValue.length === 0 && recentFilters.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Filtre folosite recent</Text>
               <FlatList
@@ -274,21 +342,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {/* Intent suggestions */}
-          {intentSuggestions.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sugestii inteligente</Text>
-              <FlatList
-                data={intentSuggestions}
-                renderItem={renderIntentItem}
-                keyExtractor={(item, index) => `intent-${index}`}
-                scrollEnabled={false}
-              />
-            </View>
-          )}
-
-          {/* Suggestions */}
-          {suggestions.length > 0 && (
+          {localValue.length >= 2 && suggestions.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Sugestii</Text>
               <FlatList
@@ -300,8 +354,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {/* Trending */}
-          {trendingSearches.length > 0 && localValue.length === 0 && (
+          {localValue.length === 0 && trendingSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Trending acum</Text>
               <FlatList
@@ -312,12 +365,7 @@ export function AdvancedSearch({
               />
             </View>
           )}
-
-          {/* Empty state */}
-          {localValue.length >= 2 && suggestions.length === 0 && recentSearches.length === 0 && (
-            renderEmptyState()
-          )}
-        </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -336,7 +384,7 @@ export function OfflineBanner({ visible, onRetry }: OfflineBannerProps) {
 
   return (
     <View style={styles.offlineBanner}>
-      <MaterialCommunityIcons name="wifi-off" size={16} color="#FFFFFF" />
+      <Ionicons name="wifi-off-outline" size={16} color="#FFFFFF" />
       <Text style={styles.offlineText}>Ești offline. Unele funcționalități pot fi limitate.</Text>
       {onRetry && (
         <TouchableOpacity onPress={onRetry} style={styles.retryButton}>
@@ -351,6 +399,14 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative',
     zIndex: 100,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    zIndex: 99,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -390,16 +446,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    marginTop: spacing.xs,
-    maxHeight: 400,
+    borderColor: '#E5E7EB',
+    marginTop: spacing.sm,
+    maxHeight: 420,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
     zIndex: 101,
   },
   section: {
@@ -425,6 +481,77 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.body,
     color: colors.textPrimary,
+  },
+  productResultItem: {
+    flexDirection: 'row',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    padding: spacing.sm,
+    marginBottom: spacing.xs,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.brandRed,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  productResultImageWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  productResultImage: {
+    width: '100%',
+    height: '100%',
+  },
+  productResultImageFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  productResultImageFallbackText: {
+    color: colors.textSecondary,
+    fontSize: typography.h3,
+    fontWeight: '800',
+  },
+  productResultContent: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  productResultBrand: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  productResultName: {
+    color: colors.textPrimary,
+    fontSize: typography.body,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  productResultFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.xxs,
+  },
+  productResultStock: {
+    color: colors.textSecondary,
+    fontSize: typography.micro,
+  },
+  productResultPrice: {
+    color: colors.brandRed,
+    fontSize: typography.h3,
+    fontWeight: '900',
   },
   filterRow: {
     gap: spacing.xs,
@@ -458,6 +585,11 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  bodyMuted: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   offlineBanner: {
     flexDirection: 'row',
