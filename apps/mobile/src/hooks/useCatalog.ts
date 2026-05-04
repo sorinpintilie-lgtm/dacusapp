@@ -4,7 +4,7 @@ import { collection, getDocs } from 'firebase/firestore';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
 import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
-import { getCurrentFirebaseUser, getFirebaseDb } from '../services/firebaseAuth';
+import { getFirebaseDb } from '../services/firebaseAuth';
 import {
   loadCatalogStamp,
   loadLiveCatalog,
@@ -43,11 +43,6 @@ const mergeProductsById = (base: CatalogProduct[], incoming: CatalogProduct[]) =
 };
 
 const loadCatalogFromFirestore = async (): Promise<LiveCatalogPayload> => {
-  const user = getCurrentFirebaseUser();
-  if (!user) {
-    throw new Error('Catalog Firestore indisponibil fără autentificare.');
-  }
-
   const db = getFirebaseDb();
   const [categoriesSnapshot, productsSnapshot] = await Promise.all([
     getDocs(collection(db, 'catalog', 'meta', 'categories')),
@@ -209,12 +204,6 @@ export const useCatalog = (): CatalogState => {
       }
 
       try {
-        const lastCheckedAt = cachedEntry?.lastCheckedAt ?? 0;
-        const timeSinceLastCheckMs = lastCheckedAt
-          ? Math.max(0, now - lastCheckedAt)
-          : Number.POSITIVE_INFINITY;
-        const hasCheckedToday = timeSinceLastCheckMs <= CATALOG_CACHE_MAX_AGE_MS;
-
         let stampPayload: { stamp: string } | null = null;
         try {
           stampPayload = await loadCatalogStamp();
@@ -222,51 +211,27 @@ export const useCatalog = (): CatalogState => {
           console.warn('[BOOT][useCatalog] stamp fetch failed, using fallback logic');
         }
 
-        const stampMatchesCache =
-          !!cachedEntry &&
-          typeof cachedEntry.stamp === 'string' &&
-          cachedEntry.stamp.length > 0 &&
-          stampPayload?.stamp === cachedEntry.stamp;
-        const canSkipRefresh =
-          !!cachedEntry && hasCheckedToday && (stampMatchesCache || !stampPayload);
-
-        if (canSkipRefresh) {
-          if (cached) {
-            const freshnessHours = Math.max(1, Math.round(timeSinceLastCheckMs / 3600000));
-            setCatalogMeta(
-              stampMatchesCache
-                ? `Catalog actualizat azi (${cached.products.length} produse).`
-                : `Catalog din cache (${cached.products.length} produse). Următorul update mâine la 2 AM.`,
-            );
-
-            if (cached.hasMoreProducts && cached.productsCursor) {
-              void loadRemainingCatalogPages({
-                startCursor: cached.productsCursor,
-                seedProducts: cached.products,
-                seedCategories: cached.categories,
-                stamp: cachedEntry?.stamp ?? null,
-              });
-            }
-          }
-          setCatalogError(null);
-          return;
-        }
-
         let live: LiveCatalogPayload;
         try {
-          live = await loadLiveCatalog({
-            pageSize: INITIAL_PAGE_SIZE,
-            leanQuery: true,
-            includeCategories: true,
-          });
-        } catch (liveError) {
+          live = await loadCatalogFromFirestore();
+          if (!active) return;
+
+          const hasFirestoreCatalog = live.categories.length > 0 || live.products.length > 0;
+          if (!hasFirestoreCatalog) {
+            throw new Error('Catalog Firestore gol.');
+          }
+
+          setCatalogMeta(`Catalog Firestore: ${live.products.length} produse încărcate.`);
+        } catch (firestoreError) {
           try {
-            live = await loadCatalogFromFirestore();
-            if (!active) return;
-            setCatalogMeta(`Catalog Firestore: ${live.products.length} produse încărcate.`);
-          } catch (firestoreError) {
+            live = await loadLiveCatalog({
+              pageSize: INITIAL_PAGE_SIZE,
+              leanQuery: true,
+              includeCategories: true,
+            });
+          } catch (liveError) {
             throw new Error(
-              `live=${liveError instanceof Error ? liveError.message : String(liveError)}; firestore=${firestoreError instanceof Error ? firestoreError.message : String(firestoreError)}`,
+              `firestore=${firestoreError instanceof Error ? firestoreError.message : String(firestoreError)}; live=${liveError instanceof Error ? liveError.message : String(liveError)}`,
             );
           }
         }
@@ -302,7 +267,7 @@ export const useCatalog = (): CatalogState => {
         setCatalogMeta(
           live.hasMoreProducts
             ? `Catalog live: ${live.products.length} produse încărcate inițial (restul în fundal).`
-            : `Catalog live: ${live.products.length} produse încărcate.`,
+            : `Catalog activ: ${live.products.length} produse încărcate.`,
         );
 
         if (live.hasMoreProducts && live.productsCursor) {
