@@ -25,12 +25,12 @@ let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 
 export const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyDcus-mobile-app-key',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBmyVr52GxqB0igJJry00rNsbx0PlTz0Pg',
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'dacus-b40f9.firebaseapp.com',
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'dacus-b40f9',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'dacus-b40f9.appspot.com',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '000000000000',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:000000000000:mobile:0000000000000000000000',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'dacus-b40f9.firebasestorage.app',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '216949470003',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:216949470003:ios:deb857c248586904a90446',
 };
 
 export const initFirebase = (): { auth: Auth; db: Firestore } => {

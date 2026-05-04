@@ -1,17 +1,9 @@
 import { httpsCallable } from 'firebase/functions';
-import { getApp, initializeApp, type FirebaseApp } from 'firebase/app';
+import { getApp, initializeApp } from 'firebase/app';
+import { firebaseConfig } from './firebaseAuth';
 
 let functions: any = null;
 
-const firebaseConfig = {
-  apiKey: 'AIzaSyDcus-mobile-app-key',
-  authDomain: 'dacus-b40f9.firebaseapp.com',
-  projectId: 'dacus-b40f9',
-  storageBucket: 'dacus-b40f9.appspot.com',
-  messagingSenderId: '000000000000',
-  appId: '1:000000000000:mobile:0000000000000000000000',
-  functionsDomain: 'us-central1-dacus-b40f9.cloudfunctions.net',
-};
 
 const initFunctions = async () => {
   if (!functions) {

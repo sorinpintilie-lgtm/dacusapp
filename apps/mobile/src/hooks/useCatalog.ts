@@ -270,7 +270,8 @@ export const useCatalog = (): CatalogState => {
         console.error('[BOOT][useCatalog] hydrateCatalog failed', {
           error,
         });
-        setCatalogError('Nu s-a putut încărca catalogul live momentan.');
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setCatalogError(`Nu s-a putut încărca catalogul live momentan. (${errorMessage})`);
         setCatalogMeta(
           cached && cached.products.length > 0
             ? `Catalog cache activ (${cached.products.length} produse). Reîmprospătarea live a eșuat.`
