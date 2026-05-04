@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { collection, getDocs } from 'firebase/firestore';
+
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
 import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
+import { getCurrentFirebaseUser, getFirebaseDb } from '../services/firebaseAuth';
 import {
   loadCatalogStamp,
   loadLiveCatalog,
   streamLiveCatalogProductsAfterCursor,
+  type LiveCatalogPayload,
 } from '../services/storefront';
 import { buildProductIndexes } from '../utils/catalogFilters';
 
@@ -29,12 +33,40 @@ type CatalogState = {
   selectedProduct?: CatalogProduct;
   countByCategory: Map<string, number>;
   productsById: Map<string, CatalogProduct>;
+  refreshCatalog: () => void;
 };
 
 const mergeProductsById = (base: CatalogProduct[], incoming: CatalogProduct[]) => {
   const merged = new Map(base.map((item) => [item.id, item]));
   incoming.forEach((item) => merged.set(item.id, item));
   return Array.from(merged.values());
+};
+
+const loadCatalogFromFirestore = async (): Promise<LiveCatalogPayload> => {
+  const user = getCurrentFirebaseUser();
+  if (!user) {
+    throw new Error('Catalog Firestore indisponibil fără autentificare.');
+  }
+
+  const db = getFirebaseDb();
+  const [categoriesSnapshot, productsSnapshot] = await Promise.all([
+    getDocs(collection(db, 'catalog', 'meta', 'categories')),
+    getDocs(collection(db, 'catalog', 'meta', 'products')),
+  ]);
+
+  const categories = categoriesSnapshot.docs
+    .map((doc) => doc.data() as CatalogCategory)
+    .filter((item) => item && typeof item.id === 'string');
+  const products = productsSnapshot.docs
+    .map((doc) => doc.data() as CatalogProduct)
+    .filter((item) => item && typeof item.id === 'string');
+
+  return {
+    categories,
+    products,
+    hasMoreProducts: false,
+    productsCursor: null,
+  };
 };
 
 export const useCatalog = (): CatalogState => {
@@ -45,6 +77,7 @@ export const useCatalog = (): CatalogState => {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [catalogMeta, setCatalogMeta] = useState('Catalog live: se încarcă...');
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
 
   const upsertProducts = useCallback((items: CatalogProduct[]) => {
     if (!Array.isArray(items) || items.length === 0) return;
@@ -53,6 +86,10 @@ export const useCatalog = (): CatalogState => {
       items.forEach((item) => merged.set(item.id, item));
       return Array.from(merged.values());
     });
+  }, []);
+
+  const refreshCatalog = useCallback(() => {
+    setCatalogRefreshKey((value) => value + 1);
   }, []);
 
   useEffect(() => {
@@ -215,11 +252,24 @@ export const useCatalog = (): CatalogState => {
           return;
         }
 
-        const live = await loadLiveCatalog({
-          pageSize: INITIAL_PAGE_SIZE,
-          leanQuery: true,
-          includeCategories: true,
-        });
+        let live: LiveCatalogPayload;
+        try {
+          live = await loadLiveCatalog({
+            pageSize: INITIAL_PAGE_SIZE,
+            leanQuery: true,
+            includeCategories: true,
+          });
+        } catch (liveError) {
+          try {
+            live = await loadCatalogFromFirestore();
+            if (!active) return;
+            setCatalogMeta(`Catalog Firestore: ${live.products.length} produse încărcate.`);
+          } catch (firestoreError) {
+            throw new Error(
+              `live=${liveError instanceof Error ? liveError.message : String(liveError)}; firestore=${firestoreError instanceof Error ? firestoreError.message : String(firestoreError)}`,
+            );
+          }
+        }
         if (!active) return;
 
         const invalidLiveProducts = collectInvalidProductShape(live.products as unknown[]);
@@ -287,7 +337,7 @@ export const useCatalog = (): CatalogState => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [catalogRefreshKey]);
 
   useEffect(() => {
     if (categories.length > 0 && !categories.some((item) => item.id === selectedCategoryId)) {
@@ -333,5 +383,6 @@ export const useCatalog = (): CatalogState => {
     selectedProduct,
     productsById,
     countByCategory,
+    refreshCatalog,
   };
 };

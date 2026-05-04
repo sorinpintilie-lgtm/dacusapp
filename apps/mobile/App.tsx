@@ -355,6 +355,7 @@ function AppContent() {
     setCatalogError,
     setCatalogMeta,
     upsertProducts,
+    refreshCatalog,
   } = useCatalog();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [accountUser, setAccountUser] = useState<{
@@ -1120,6 +1121,7 @@ function AppContent() {
         email: user.email,
       });
       setAccountUser(user);
+      refreshCatalog();
       void Promise.all([
         fetchCart(),
         fetchOrders(),
@@ -3006,6 +3008,7 @@ function AppContent() {
     void loginAccount(email, authPassword)
       .then((user) => {
         setAccountUser(user);
+        refreshCatalog();
         setCatalogError(null);
         setCatalogMeta(`Bine ai revenit, ${user.name}.`);
         return Promise.all([
@@ -3126,6 +3129,7 @@ function AppContent() {
     void registerAccount(email, authPassword, name)
       .then((user) => {
         setAccountUser(user);
+        refreshCatalog();
         setCatalogError(null);
         setCatalogMeta(`Cont creat pentru ${user.name}`);
         return Promise.all([
