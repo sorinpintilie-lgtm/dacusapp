@@ -58,7 +58,134 @@ type LoadCatalogOptions = {
   includeCategories?: boolean;
 };
 
+type StorefrontConnectionPageInfo = {
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
+type StorefrontCollectionNode = {
+  id: string;
+  title: string;
+  description: string;
+  image?: { url: string } | null;
+};
+
+type StorefrontProductNode = {
+  id: string;
+  title: string;
+  handle: string;
+  vendor: string;
+  productType?: string;
+  description: string;
+  availableForSale: boolean;
+  featuredImage?: {
+    thumbnailUrl: string;
+    imageUrl: string;
+  } | null;
+  collections: {
+    edges: Array<{ node: { id: string } }>;
+  };
+  variants: {
+    edges: Array<{
+      node: {
+        id: string;
+        title: string;
+        sku?: string | null;
+        availableForSale: boolean;
+        price: { amount: string; currencyCode: string };
+        compareAtPrice?: { amount: string; currencyCode: string } | null;
+      };
+    }>;
+  };
+};
+
+type StorefrontCollectionsResult = {
+  collections: {
+    pageInfo: StorefrontConnectionPageInfo;
+    edges: Array<{ node: StorefrontCollectionNode }>;
+  };
+};
+
+type StorefrontProductsResult = {
+  products: {
+    pageInfo: StorefrontConnectionPageInfo;
+    edges: Array<{ node: StorefrontProductNode }>;
+  };
+};
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+
+const STOREFRONT_COLLECTIONS_QUERY = `
+  query MobileCatalogCollections($first: Int!, $after: String) {
+    collections(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          id
+          title
+          description
+          image {
+            url
+          }
+        }
+      }
+    }
+  }
+`;
+
+const STOREFRONT_PRODUCTS_QUERY = `
+  query MobileCatalogProducts($first: Int!, $after: String) {
+    products(first: $first, after: $after, sortKey: ID) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        node {
+          id
+          title
+          handle
+          vendor
+          productType
+          description
+          availableForSale
+          featuredImage {
+            thumbnailUrl: url(transform: { maxWidth: 420, maxHeight: 420, crop: CENTER })
+            imageUrl: url(transform: { maxWidth: 960, maxHeight: 960, crop: CENTER })
+          }
+          collections(first: 20) {
+            edges {
+              node {
+                id
+              }
+            }
+          }
+          variants(first: 1) {
+            edges {
+              node {
+                id
+                title
+                sku
+                availableForSale
+                price {
+                  amount
+                  currencyCode
+                }
+                compareAtPrice {
+                  amount
+                  currencyCode
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
 
 const isLikelyLocalApiBaseUrl = (value: string) => {
   try {
@@ -227,6 +354,14 @@ const normalizeProduct = (
   };
 };
 
+const toSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 const normalizePayload = (payload: CatalogApiPayload): LiveCatalogPayload => ({
   categories: (Array.isArray(payload.categories) ? payload.categories : [])
     .map((item, index) => normalizeCategory(item, index))
@@ -244,6 +379,145 @@ const normalizePayload = (payload: CatalogApiPayload): LiveCatalogPayload => ({
   hasMoreProducts: !!payload.hasMoreProducts,
   productsCursor: payload.productsCursor ?? null,
 });
+
+const queryStorefrontDirect = async <T>(
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<T> => {
+  if (!mobileEnv.shopifyStoreDomain || !mobileEnv.storefrontPublicToken) {
+    throw new Error('Lipsește tokenul public Shopify pentru catalog guest.');
+  }
+
+  const endpoint = `https://${mobileEnv.shopifyStoreDomain}/api/2024-10/graphql.json`;
+  const response = await fetchWithRetry(() =>
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Storefront-Access-Token': mobileEnv.storefrontPublicToken,
+      },
+      body: JSON.stringify({ query, variables }),
+    }),
+  );
+
+  if (!response.ok) {
+    throw new Error(`Shopify Storefront request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    data?: T;
+    errors?: Array<{ message: string }>;
+  };
+
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map((item) => item.message).join('; '));
+  }
+
+  if (!payload.data) {
+    throw new Error('Shopify Storefront nu a returnat date.');
+  }
+
+  return payload.data;
+};
+
+const loadFromStorefrontDirect = async (options?: LoadCatalogOptions): Promise<LiveCatalogPayload> => {
+  const pageSize = Math.min(250, Math.max(10, Math.trunc(options?.pageSize ?? 120)));
+  const categoriesData = await queryStorefrontDirect<StorefrontCollectionsResult>(
+    STOREFRONT_COLLECTIONS_QUERY,
+    {
+      first: 250,
+      after: null,
+    },
+  );
+
+  const categories = categoriesData.collections.edges.map(({ node }) => ({
+    id: node.id,
+    name: node.title,
+    description: node.description || 'Categorie produse Dacus',
+    ...(node.image?.url ? { imageUrl: node.image.url } : {}),
+  }));
+
+  const productsData = await queryStorefrontDirect<StorefrontProductsResult>(
+    STOREFRONT_PRODUCTS_QUERY,
+    {
+      first: pageSize,
+      after: options?.startAfterCursor ?? null,
+    },
+  );
+
+  const categoryIds = new Set(categories.map((item) => item.id));
+  const products = productsData.products.edges.map(({ node }) => {
+    const collectionIds = Array.from(
+      new Set(
+        node.collections.edges
+          .map((edge) => edge.node.id)
+          .filter((value) => typeof value === 'string' && value.length > 0),
+      ).values(),
+    );
+    const matchedCollectionIds = collectionIds.filter((collectionId) => categoryIds.has(collectionId));
+    let resolvedCategoryId = matchedCollectionIds[0] ?? null;
+    let resolvedCategoryIds = matchedCollectionIds;
+
+    if (!resolvedCategoryId) {
+      const productType = node.productType?.trim();
+      if (productType) {
+        const typeCategoryId = `product-type-${toSlug(productType) || 'diverse'}`;
+        resolvedCategoryId = typeCategoryId;
+        resolvedCategoryIds = [typeCategoryId];
+      }
+    }
+
+    if (!resolvedCategoryId) {
+      resolvedCategoryIds = ['uncategorized'];
+    }
+
+    const firstVariant = node.variants.edges[0]?.node;
+    const priceRon = Number(firstVariant?.price.amount ?? 0);
+    const oldPrice = firstVariant?.compareAtPrice?.amount;
+    const oldPriceRon = oldPrice ? Number(oldPrice) : undefined;
+    const inStock = firstVariant?.availableForSale ?? node.availableForSale;
+
+    return {
+      id: node.id,
+      categoryId: resolvedCategoryId ?? 'uncategorized',
+      ...(resolvedCategoryIds.length > 0 ? { categoryIds: resolvedCategoryIds } : {}),
+      ...(node.handle ? { handle: node.handle } : {}),
+      ...(firstVariant?.sku ? { sku: firstVariant.sku } : {}),
+      ...(firstVariant?.id ? { variantId: firstVariant.id } : {}),
+      name: node.title,
+      brand: node.vendor || 'Dacus',
+      ...(node.description ? { description: node.description } : {}),
+      ...(node.featuredImage?.thumbnailUrl ? { thumbnailUrl: node.featuredImage.thumbnailUrl } : {}),
+      ...(node.featuredImage?.imageUrl
+        ? { imageUrl: node.featuredImage.imageUrl }
+        : node.featuredImage?.thumbnailUrl
+          ? { imageUrl: node.featuredImage.thumbnailUrl }
+          : {}),
+      priceRon,
+      ...(typeof oldPriceRon === 'number' ? { oldPriceRon } : {}),
+      stockLabel: inStock ? 'În stoc' : 'Indisponibil',
+      ...(firstVariant?.id
+        ? {
+            variants: [
+              {
+                id: firstVariant.id,
+                name: firstVariant.title || 'Varianta standard',
+                priceRon,
+                inStock,
+              },
+            ],
+          }
+        : {}),
+    } satisfies LiveCatalogProduct;
+  });
+
+  return {
+    categories,
+    products,
+    hasMoreProducts: productsData.products.pageInfo.hasNextPage,
+    productsCursor: productsData.products.pageInfo.endCursor,
+  };
+};
 
 const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPayload> => {
   const baseUrl = mobileEnv.apiBaseUrl.endsWith('/')
@@ -296,6 +570,16 @@ const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPay
 export const loadLiveCatalog = async (
   options?: LoadCatalogOptions,
 ): Promise<LiveCatalogPayload> => {
+  const isGuest = !options?.startAfterCursor;
+
+  if (isGuest) {
+    try {
+      return await loadFromStorefrontDirect(options);
+    } catch {
+      // continue to callable/api fallbacks
+    }
+  }
+
   try {
     const result = await getCatalogFromFn(undefined, options?.pageSize || 250);
     return {
@@ -304,13 +588,22 @@ export const loadLiveCatalog = async (
       hasMoreProducts: result.hasMoreProducts,
       productsCursor: result.productsCursor,
     };
-  } catch {
-    return loadFromApi({
-      includeCategories: options?.includeCategories ?? true,
-      pageSize: options?.pageSize,
-      startAfterCursor: options?.startAfterCursor,
-      leanQuery: options?.leanQuery ?? true,
-    });
+  } catch (callableError) {
+    try {
+      return await loadFromApi({
+        includeCategories: options?.includeCategories ?? true,
+        pageSize: options?.pageSize,
+        startAfterCursor: options?.startAfterCursor,
+        leanQuery: options?.leanQuery ?? true,
+      });
+    } catch (apiError) {
+      if (isGuest) {
+        return loadFromStorefrontDirect(options);
+      }
+      throw new Error(
+        `callable=${callableError instanceof Error ? callableError.message : String(callableError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}`,
+      );
+    }
   }
 };
 

@@ -6,7 +6,7 @@ const schema = z.object({
     .url()
     .default('https://us-central1-dacus-b40f9.cloudfunctions.net/api'),
   EXPO_PUBLIC_API_BASE_URL_DEVICE: z.string().url().optional(),
-  EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: z.string().default(''),
+  EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: z.string().default('f4eb2c-ae.myshopify.com'),
   EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN: z.string().default(''),
   EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID: z.string().default('not-configured'),
   EXPO_PUBLIC_SHOPIFY_AUTH_AUTHORIZE_URL: z
@@ -45,7 +45,7 @@ const data = parsed.success
   : {
       EXPO_PUBLIC_API_BASE_URL: 'https://us-central1-dacus-b40f9.cloudfunctions.net/api',
       EXPO_PUBLIC_API_BASE_URL_DEVICE: undefined,
-      EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: '',
+      EXPO_PUBLIC_SHOPIFY_STORE_DOMAIN: 'f4eb2c-ae.myshopify.com',
       EXPO_PUBLIC_SHOPIFY_STOREFRONT_PUBLIC_TOKEN: '',
       EXPO_PUBLIC_SHOPIFY_AUTH_CLIENT_ID: 'not-configured',
       EXPO_PUBLIC_SHOPIFY_AUTH_AUTHORIZE_URL:
