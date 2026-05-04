@@ -591,6 +591,17 @@ export const registerPushToken = functions.https.onCall(async (request: any) => 
   return { ok: true };
 });
 
+// ========== GET CATALOG STAMP ==========
+export const getCatalogStamp = functions.https.onCall(async () => {
+  const stampDoc = await db.collection('catalog').doc('stamp').get();
+  const data = stampDoc.exists ? stampDoc.data() : null;
+  return {
+    stamp: data?.stamp || 'empty',
+    source: 'live',
+    generatedAt: data?.generatedAt || new Date().toISOString(),
+  };
+});
+
 // ========== SCHEDULED CATALOG SYNC ==========
 // Note: Cloud Scheduler setup required in Firebase Console:
 // 1. Go to Cloud Scheduler in Google Cloud Console

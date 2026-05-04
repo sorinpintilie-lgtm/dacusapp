@@ -1,5 +1,5 @@
 import { mobileEnv } from '../config/env';
-import { getCatalog as getCatalogFromFn } from './functionsClient';
+import { getCatalog as getCatalogFromFn, getCatalogStamp as getCatalogStampFromFn } from './functionsClient';
 
 type CatalogApiPayload = {
   categories: LiveCatalogCategory[];
@@ -570,18 +570,8 @@ const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPay
 export const loadLiveCatalog = async (
   options?: LoadCatalogOptions,
 ): Promise<LiveCatalogPayload> => {
-  const isGuest = !options?.startAfterCursor;
-
-  if (isGuest) {
-    try {
-      return await loadFromStorefrontDirect(options);
-    } catch {
-      // continue to callable/api fallbacks
-    }
-  }
-
   try {
-    const result = await getCatalogFromFn(undefined, options?.pageSize || 250);
+    const result = await getCatalogFromFn(options?.startAfterCursor, options?.pageSize || 250);
     return {
       categories: result.categories as LiveCatalogCategory[],
       products: result.products as LiveCatalogProduct[],
@@ -609,8 +599,8 @@ export const loadLiveCatalog = async (
 
 export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> => {
   try {
-    const result = await getCatalogFromFn(undefined, 1);
-    return { stamp: result.stamp ?? 'updated' };
+    const result = await getCatalogStampFromFn();
+    return { stamp: result.stamp };
   } catch {
     // fallback to REST API below
   }

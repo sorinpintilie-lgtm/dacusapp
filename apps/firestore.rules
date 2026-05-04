@@ -1,9 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Catalog - readable by all authenticated users
+    // Catalog - readable by all users
     match /catalog/{document=**} {
-      allow read: if request.auth != null;
+      allow read: if true;
       allow write: if false; // Only Firebase Functions can write
     }
     

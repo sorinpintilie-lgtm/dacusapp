@@ -220,3 +220,16 @@ export const authRegister = async (
   const result = await fn({ email, password, name });
   return result.data as { sessionToken: string; user: FirebaseUser };
 };
+
+interface CatalogStampResponse {
+  stamp: string;
+  source: string;
+  generatedAt: string;
+}
+
+export const getCatalogStamp = async (): Promise<CatalogStampResponse> => {
+  const fns = await getFirebaseFunctions();
+  const fn = httpsCallable(fns, 'getCatalogStamp');
+  const result = await fn(null);
+  return result.data as CatalogStampResponse;
+};
