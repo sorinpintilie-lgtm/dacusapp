@@ -357,6 +357,7 @@ function AppContent() {
     setCatalogMeta,
     upsertProducts,
     refreshCatalog,
+    ensureCategoryProductsLoaded,
   } = useCatalog();
   const [cart, setCart] = useState<CartLine[]>([]);
   const [accountUser, setAccountUser] = useState<{
@@ -1474,6 +1475,13 @@ function AppContent() {
   const openCategory = (categoryId: string) => {
     setSelectedCategoryId(categoryId);
     setPage('products');
+    setProductsLoadingMore(true);
+
+    InteractionManager.runAfterInteractions(() => {
+      void ensureCategoryProductsLoaded(categoryId)
+        .catch(() => undefined)
+        .finally(() => setProductsLoadingMore(false));
+    });
 
     setTimeout(() => {
       persistPreferences((current) => ({
@@ -1484,6 +1492,7 @@ function AppContent() {
         ].slice(0, CONTINUE_BROWSING_LIMIT),
       }));
     }, 0);
+
   };
 
   const restorePageWithScroll = (targetPage: Page, scrollY: number) => {

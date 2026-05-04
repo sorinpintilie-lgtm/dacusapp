@@ -21,6 +21,7 @@
     "verify:mobile:release": "npm run verify:release -w @dacus/mobile",
     "sync:catalog:firestore": "node scripts/sync-shopify-catalog-to-firestore.mjs",
     "export:catalog:snapshot": "node scripts/export-firestore-catalog-snapshot.mjs",
+    "build:catalog:chunks": "node scripts/build-mobile-catalog-chunks.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check"
   },

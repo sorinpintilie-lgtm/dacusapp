@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { collection, getDocs } from 'firebase/firestore';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
-import { bundledCatalogSnapshot } from '../data/catalogSnapshot';
+import { bundledCatalogBootstrap } from '../data/catalogBootstrap';
+import { loadBundledCategoryProducts } from '../data/catalogChunkIndex';
 import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
 import { getFirebaseDb } from '../services/firebaseAuth';
 import {
@@ -16,8 +17,8 @@ import { buildProductIndexes } from '../utils/catalogFilters';
 
 const CATALOG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours (once per day at 2 AM)
 const INITIAL_PAGE_SIZE = 250;
-const BUNDLED_CATEGORIES = bundledCatalogSnapshot.categories ?? [];
-const BUNDLED_PRODUCTS = bundledCatalogSnapshot.products ?? [];
+const BUNDLED_CATEGORIES = bundledCatalogBootstrap.categories ?? [];
+const BUNDLED_PRODUCTS = bundledCatalogBootstrap.products ?? [];
 
 type CatalogState = {
   categories: CatalogCategory[];
@@ -37,6 +38,7 @@ type CatalogState = {
   countByCategory: Map<string, number>;
   productsById: Map<string, CatalogProduct>;
   refreshCatalog: () => void;
+  ensureCategoryProductsLoaded: (categoryId: string) => Promise<void>;
 };
 
 const mergeProductsById = (base: CatalogProduct[], incoming: CatalogProduct[]) => {
@@ -80,6 +82,15 @@ export const useCatalog = (): CatalogState => {
       : 'Catalog local: se pregătește...'
   );
   const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
+  const loadedCategoryIdsRef = useRef(
+    new Set(
+      BUNDLED_PRODUCTS.flatMap((product) =>
+        Array.isArray(product.categoryIds) && product.categoryIds.length > 0
+          ? product.categoryIds
+          : [product.categoryId],
+      ).filter((value): value is string => typeof value === 'string' && value.length > 0),
+    ),
+  );
 
   const upsertProducts = useCallback((items: CatalogProduct[]) => {
     if (!Array.isArray(items) || items.length === 0) return;
@@ -92,6 +103,19 @@ export const useCatalog = (): CatalogState => {
 
   const refreshCatalog = useCallback(() => {
     setCatalogRefreshKey((value) => value + 1);
+  }, []);
+
+  const ensureCategoryProductsLoaded = useCallback(async (categoryId: string) => {
+    if (!categoryId || loadedCategoryIdsRef.current.has(categoryId)) return;
+
+    const chunkProducts = loadBundledCategoryProducts(categoryId);
+    if (chunkProducts.length === 0) {
+      loadedCategoryIdsRef.current.add(categoryId);
+      return;
+    }
+
+    loadedCategoryIdsRef.current.add(categoryId);
+    setProducts((prev) => mergeProductsById(prev, chunkProducts));
   }, []);
 
   useEffect(() => {
@@ -356,5 +380,6 @@ export const useCatalog = (): CatalogState => {
     productsById,
     countByCategory,
     refreshCatalog,
+    ensureCategoryProductsLoaded,
   };
 };
