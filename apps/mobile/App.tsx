@@ -13,6 +13,7 @@ import {
   InteractionManager,
   Linking,
   Modal,
+  PanResponder,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -1525,6 +1526,40 @@ function AppContent() {
     restorePageWithScroll('products', pageScrollOffsetsRef.current.products ?? 0);
   };
 
+  const goBackBySwipe = () => {
+    if (zoomImageUrl) {
+      closeImageZoom();
+      return;
+    }
+
+    if (page === 'productDetails') {
+      goBackFromProductDetails();
+      return;
+    }
+
+    if (page === 'products') {
+      setPage('categories');
+      return;
+    }
+
+    if (page === 'categories') {
+      setPage('home');
+      return;
+    }
+
+    if (
+      page === 'cart' ||
+      page === 'checkout' ||
+      page === 'loyalty' ||
+      page === 'account' ||
+      page === 'settings' ||
+      page === 'login' ||
+      page === 'register'
+    ) {
+      setPage('home');
+    }
+  };
+
   const openImageZoom = (url: string | undefined) => {
     if (!hasImageUrl(url)) return;
     setZoomLevel(1);
@@ -1535,6 +1570,16 @@ function AppContent() {
     setZoomImageUrl(null);
     setZoomLevel(1);
   };
+
+  const swipeBackResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gestureState) =>
+      gestureState.x0 < 28 && gestureState.dx > 18 && Math.abs(gestureState.dy) < 18,
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.x0 < 40 && gestureState.dx > 72 && Math.abs(gestureState.dy) < 32) {
+        goBackBySwipe();
+      }
+    },
+  });
 
   const resetFilters = () => {
     setBrandFilter('toate');
@@ -3923,7 +3968,10 @@ function AppContent() {
       ) : null}
 
       {page === 'products' || page === 'categories' ? (
-        <Animated.View style={[styles.pageContainer, { opacity: pageFadeAnim }]}> 
+        <Animated.View
+          style={[styles.pageContainer, { opacity: pageFadeAnim }]}
+          {...swipeBackResponder.panHandlers}
+        >
           {renderPage()}
         </Animated.View>
       ) : (
@@ -4433,7 +4481,7 @@ const styles = StyleSheet.create({
   cartButtonText: { color: '#FFFFFF', fontSize: typography.caption, fontWeight: '800' },
   scroll: { flex: 1, backgroundColor: colors.surfaceAlt },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: 140 },
-  pageContainer: { flex: 1 },
+  pageContainer: { flex: 1, minHeight: 0 },
   stackLarge: { gap: spacing.lg },
   stackSmall: { gap: spacing.sm, flex: 1, minWidth: 0 },
   pageHeading: {
