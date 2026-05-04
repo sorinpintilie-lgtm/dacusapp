@@ -26,7 +26,7 @@ const navConfig: Array<{ target: Page; label: string; icon: IconName; activeIcon
   { target: 'home', label: 'Acasă', icon: 'home-outline', activeIcon: 'home' },
   { target: 'categories', label: 'Categorii', icon: 'grid-outline', activeIcon: 'grid' },
   { target: 'cart', label: 'Coș', icon: 'cart-outline', activeIcon: 'cart' },
-  { target: 'loyalty', label: 'Fidelitate', icon: 'star-outline', activeIcon: 'star' },
+  { target: 'loyalty', label: 'Fidelitate', icon: 'wallet-outline', activeIcon: 'wallet' },
   { target: 'account', label: 'Cont', icon: 'person-outline', activeIcon: 'person' },
 ];
 
@@ -80,20 +80,20 @@ const BADGE_SIZE = 18;
 
 const styles = StyleSheet.create({
   bottomNav: {
-    height: 64,
-    backgroundColor: colors.surface,
+    height: 70,
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderTopWidth: 1,
     borderTopColor: colors.border,
     flexDirection: 'row',
     ...Platform.select({
       ios: {
         shadowColor: '#0B1020',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.05,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 12,
+        elevation: 10,
       },
     }),
   },
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: spacing.xs,
-    gap: spacing.xxs,
+    gap: 2,
     position: 'relative',
   },
   navItemPressed: {
@@ -116,31 +116,33 @@ const styles = StyleSheet.create({
   navIcon: {
     color: colors.textSecondary,
     marginBottom: 2,
+    opacity: 0.88,
   },
   navIconActive: {
     color: colors.brandRed,
+    opacity: 1,
   },
   navText: {
     color: colors.textSecondary,
-    fontSize: typography.body,
+    fontSize: typography.caption,
     fontWeight: '600',
     letterSpacing: -0.1,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   navTextActive: {
-    color: colors.brandRed,
+    color: colors.brandBlack,
     fontWeight: '700',
   },
   activeIndicator: {
     position: 'absolute',
-    top: 2,
+    top: 6,
     left: '50%',
-    transform: [{ translateX: -12 }],
-    width: 24,
-    height: 3,
+    transform: [{ translateX: -10 }],
+    width: 20,
+    height: 2,
     backgroundColor: colors.brandRed,
-    borderTopLeftRadius: radii.sm,
-    borderTopRightRadius: radii.sm,
+    borderRadius: radii.pill,
+    opacity: 0.9,
   },
   cartBadge: {
     position: 'absolute',

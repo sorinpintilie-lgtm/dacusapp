@@ -94,7 +94,7 @@ export const HomeScreen = ({
             const heroHeadline =
               typeof heroProduct?.name === 'string' && heroProduct.name.trim().length > 0
                 ? fixRomanianMojibake(heroProduct.name.trim())
-                : 'Scule și echipamente pentru profesioniști';
+                : 'Echipamente și scule pentru lucru serios';
             const heroPriceLabel =
               typeof heroProduct?.priceRon === 'number' ? formatPrice(heroProduct.priceRon) : null;
 
@@ -129,10 +129,14 @@ export const HomeScreen = ({
 
                         {heroPriceLabel ? (
                           <View style={styles.homeHeroPriceBlock}>
-                            <Text style={styles.homeHeroPriceLabel}>Preț</Text>
+                            <Text style={styles.homeHeroPriceLabel}>Preț curent</Text>
                             <Text style={styles.homeHeroPriceMain}>{heroPriceLabel}</Text>
                           </View>
-                        ) : null}
+                        ) : (
+                          <Text style={styles.bodyMuted}>
+                            Catalog curat, selecție rapidă și acces direct la produsele importante.
+                          </Text>
+                        )}
                       </View>
 
                       <TouchableOpacity
@@ -141,7 +145,9 @@ export const HomeScreen = ({
                           heroProduct?.id ? onOpenProduct(heroProduct.id) : onOpenProducts()
                         }
                       >
-                        <Text style={styles.homeHeroPrimaryButtonText}>Vezi produs</Text>
+                        <Text style={styles.homeHeroPrimaryButtonText}>
+                          {heroProduct?.id ? 'Deschide produsul' : 'Deschide catalogul'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -183,7 +189,7 @@ export const HomeScreen = ({
             {popularCategories.slice(0, HOME_CATEGORY_TILES_LIMIT + 2).map((category) => (
               <TouchableOpacity
                 key={category.id}
-                style={[styles.homeCategoryCarouselCard, styles.homeCategoryCarouselCardAccent]}
+                style={styles.homeCategoryCarouselCard}
                 onPress={() => onOpenCategory(category.id)}
               >
                 <Text style={styles.homeCategoryCarouselTitle} numberOfLines={2}>
@@ -205,22 +211,23 @@ export const HomeScreen = ({
       ) : null}
 
       <AnimatedEntrance delay={82}>
-        <View style={styles.homePromoRibbon}>
-          <View style={styles.homePromoBadge}>
-            <Ionicons name="rocket-outline" size={16} color={colors.brandRed} />
-            <Text style={styles.homePromoBadgeTitle}>Livrare rapidă</Text>
-            <Text style={styles.homePromoBadgeMeta}>24-48h pentru produse din stoc</Text>
+        <View
+          style={{
+            backgroundColor: colors.surface,
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: colors.border,
+            padding: spacing.md,
+            gap: spacing.xs,
+          }}
+        >
+          <View style={styles.sectionHeadLeft}>
+            <Ionicons name="shield-checkmark-outline" size={18} color={colors.brandRed} />
+            <Text style={styles.sectionLabel}>Experiență mai clară în aplicație</Text>
           </View>
-          <View style={styles.homePromoBadge}>
-            <Ionicons name="pricetag-outline" size={16} color={colors.brandRed} />
-            <Text style={styles.homePromoBadgeTitle}>Promoții curate</Text>
-            <Text style={styles.homePromoBadgeMeta}>oferte clare, direct în app</Text>
-          </View>
-          <View style={styles.homePromoBadge}>
-            <Ionicons name="star-outline" size={16} color={colors.brandAmber} />
-            <Text style={styles.homePromoBadgeTitle}>Fidelitate</Text>
-            <Text style={styles.homePromoBadgeMeta}>puncte și vouchere la fiecare comandă</Text>
-          </View>
+          <Text style={styles.bodyMuted}>
+            Produse, categorii și fidelitate organizate mai aerisit, fără blocuri vizuale agresive.
+          </Text>
         </View>
       </AnimatedEntrance>
 
@@ -228,8 +235,8 @@ export const HomeScreen = ({
         <View style={[styles.homeSectionCard, styles.homeFeaturedSectionCard]}>
           <View style={styles.sectionHeadRow}>
             <View style={styles.sectionHeadLeft}>
-              <Ionicons name="star-outline" size={18} color={colors.brandAmber} />
-              <Text style={styles.sectionLabel}>Produse recomandate azi</Text>
+              <Ionicons name="bag-handle-outline" size={18} color={colors.brandRed} />
+              <Text style={styles.sectionLabel}>Produse recomandate</Text>
             </View>
             <TouchableOpacity onPress={onOpenProducts} style={styles.seeAllButton}>
               <Text style={styles.seeAll}>Catalog complet</Text>
@@ -329,11 +336,11 @@ export const HomeScreen = ({
         : null}
 
       <AnimatedEntrance delay={228}>
-        <View style={styles.homeVisualCategoryBand}>
+        <View style={styles.homeSectionCard}>
           <View style={styles.sectionHeadRow}>
             <View style={styles.sectionHeadLeft}>
-              <Ionicons name="apps-outline" size={18} color={colors.brandBlue} />
-              <Text style={styles.sectionLabel}>Categorii care merită deschise acum</Text>
+              <Ionicons name="albums-outline" size={18} color={colors.brandBlue} />
+              <Text style={styles.sectionLabel}>Categorii de interes</Text>
             </View>
             <TouchableOpacity onPress={onOpenCategories} style={styles.seeAllButton}>
               <Text style={styles.seeAll}>Vezi toate</Text>
@@ -341,26 +348,19 @@ export const HomeScreen = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.homeCategoryVisualCarousel}
-          >
+          <View style={styles.homeChipWrap}>
             {popularCategories.slice(0, HOME_CATEGORY_TILES_LIMIT + 2).map((category) => (
               <TouchableOpacity
                 key={category.id}
-                style={[styles.homeCategoryVisualCard, styles.homeCategoryVisualCardAccent]}
+                style={styles.categoryChip}
                 onPress={() => onOpenCategory(category.id)}
               >
-                <Text style={styles.homeCategoryVisualTitle} numberOfLines={2}>
+                <Text style={styles.categoryChipText}>
                   {fixRomanianMojibake(category.name)}
-                </Text>
-                <Text style={styles.homeCategoryVisualMeta} numberOfLines={1}>
-                  {categoryProductCount.get(category.id) ?? 0} produse
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </View>
       </AnimatedEntrance>
 
@@ -438,7 +438,7 @@ export const HomeScreen = ({
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={onOpenLoyalty}>
               <Ionicons
-                name="star-outline"
+                name="wallet-outline"
                 size={16}
                 color={colors.brandRed}
                 style={{ marginRight: spacing.xs }}

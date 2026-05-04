@@ -80,7 +80,7 @@ export const LoyaltyScreen = ({
       <View style={styles.loyaltyHero}>
         <View style={styles.loyaltyHeroTop}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-            <Ionicons name="star-outline" size={22} color={colors.brandAmber} />
+            <Ionicons name="wallet-outline" size={22} color={colors.brandRed} />
             <Text style={styles.loyaltyTitle}>Program de fidelitate</Text>
           </View>
           <Text style={styles.loyaltyTierTag}>{loyalty.tier}</Text>
@@ -88,7 +88,7 @@ export const LoyaltyScreen = ({
 
         <Text style={styles.loyaltyPoints}>{loyalty.points.toLocaleString('ro-RO')} puncte</Text>
         <Text style={styles.loyaltyMeta}>
-          1 punct = 1 RON cheltuit • 100 puncte = 5 RON voucher
+          1 punct = 1 RON cheltuit. 100 puncte = voucher de 5 RON.
         </Text>
 
         <View style={styles.progressTrack}>
@@ -198,8 +198,8 @@ export const LoyaltyScreen = ({
 
       <View style={styles.cardPlain}>
         <View style={styles.sectionHeadRow}>
-          <Ionicons name="star-outline" size={18} color={colors.brandAmber} />
-          <Text style={styles.sectionLabel}>Beneficii nivel curent</Text>
+          <Ionicons name="card-outline" size={18} color={colors.brandRed} />
+          <Text style={styles.sectionLabel}>Beneficii active</Text>
         </View>
         <Text style={styles.bodyMuted}>{tierBenefitText}</Text>
       </View>

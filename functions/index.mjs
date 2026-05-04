@@ -90,6 +90,15 @@ const writeInjectResponse = (response, result, method) => {
   response.end(result.rawPayload ?? result.body ?? '');
 };
 
+const normalizeFastifyUrl = (value) => {
+  const raw = typeof value === 'string' && value.length > 0 ? value : '/';
+
+  if (raw === '/api' || raw === '/api/') return '/';
+  if (raw.startsWith('/api/')) return raw.slice(4);
+
+  return raw;
+};
+
 const getServer = async () => {
   if (!appPromise) {
     appPromise = (async () => {
@@ -109,7 +118,7 @@ export const api = onRequest({ cors: true, invoker: 'public' }, async (request, 
 
   const result = await app.inject({
     method: request.method,
-    url: request.originalUrl ?? request.url,
+    url: normalizeFastifyUrl(request.originalUrl ?? request.url),
     headers: toInjectHeaders(request.headers),
     ...(payload !== undefined ? { payload } : {}),
   });

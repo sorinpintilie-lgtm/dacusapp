@@ -163,14 +163,14 @@ export const ProductCard = memo(
             </View>
 
             <View style={styles.productCardFooter}>
-              <Text style={styles.productViewDetailsText}>Vezi detalii</Text>
+              <Text style={styles.productViewDetailsText}>Detalii produs</Text>
             </View>
           </View>
         </TouchableOpacity>
 
         <View style={styles.productActionsRow}>
           <TouchableOpacity activeOpacity={0.9} style={styles.addButton} onPress={handleAddToCart}>
-            <Text style={styles.addButtonText}>Adaugă în coș</Text>
+            <Text style={styles.addButtonText}>Adaugă</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -183,18 +183,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#ECEDEF',
     overflow: 'hidden',
+    shadowColor: '#0B1020',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 2,
   },
   productCardCompact: {
     minHeight: 284,
   },
   productTapArea: { flex: 1 },
-  productMediaWrap: { width: '100%', backgroundColor: colors.surfaceAlt },
+  productMediaWrap: { width: '100%', backgroundColor: '#FAFAFB' },
   productMedia: {
     width: '100%',
-    height: 128,
-    backgroundColor: colors.surfaceSoft,
+    height: 136,
+    backgroundColor: '#FAFAFB',
   },
   productMediaCompact: {
     height: 122,
@@ -212,16 +217,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
-    gap: spacing.xxs,
+    gap: 6,
   },
   discountBadge: {
     position: 'absolute',
     top: spacing.xs,
     left: spacing.xs,
-    backgroundColor: colors.brandRed,
-    borderRadius: radii.sm,
+    backgroundColor: 'rgba(227, 6, 19, 0.92)',
+    borderRadius: radii.pill,
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xxs,
+    paddingVertical: 3,
   },
   discountBadgeText: { color: colors.textInverted, fontSize: typography.micro, fontWeight: '900' },
   compareBadge: {
@@ -258,14 +263,15 @@ const styles = StyleSheet.create({
   },
   priceBlock: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: spacing.xs,
-    marginTop: spacing.xxs,
+    marginTop: 2,
+    flexWrap: 'wrap',
   },
   productCardFooter: {
     marginTop: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#F0F1F3',
     paddingTop: spacing.xs,
   },
   productViewDetailsText: {
@@ -278,13 +284,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   addButton: {
-    backgroundColor: colors.brandRed,
+    backgroundColor: colors.brandBlack,
     borderRadius: radii.md,
-    minHeight: 44,
+    minHeight: 42,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonText: { color: colors.textInverted, fontWeight: '800', fontSize: typography.caption },
+  addButtonText: { color: colors.textInverted, fontWeight: '800', fontSize: typography.caption, letterSpacing: 0.1 },
   productName: {
     fontSize: typography.caption,
     color: colors.textPrimary,
