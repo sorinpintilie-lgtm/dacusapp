@@ -3527,7 +3527,7 @@ function AppContent() {
           onSetSortOption={setSortOption}
           onClearSearch={clearSearch}
           productListNode={
-            <View style={styles.stackSmall}>
+            <View style={[styles.stackSmall, styles.pageContainer]}>
               <View style={styles.compareToolbar}>
                 <TouchableOpacity
                   style={styles.secondaryButton}
