@@ -26,6 +26,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const dacusLogo = require('./assets/dacus-logo.png');
 import { AdvancedSearch } from './src/components/AdvancedSearch';
+import { loadBundledSearchIndex } from './src/data/catalogSearchIndex';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { type CatalogCategory, type CatalogProduct } from './src/data/catalog';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -375,6 +376,7 @@ function AppContent() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [searchPreviewResults, setSearchPreviewResults] = useState<CatalogProduct[]>([]);
   const [searchPreviewLoading, setSearchPreviewLoading] = useState(false);
+  const [localSearchMatches, setLocalSearchMatches] = useState<CatalogProduct[]>([]);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [savedSearches, setSavedSearches] = useState<string[]>([]);
   const [recentFilterSnapshots, setRecentFilterSnapshots] = useState<RecentFilterSnapshot[]>([]);
@@ -601,22 +603,34 @@ function AppContent() {
     (countByCategory.get(selectedCategoryId) ?? 0) > 0 &&
     localCollectionFilteredResults.length > 0;
 
-  const productsResultsSource = useMemo(
-    () => (shouldUseLocalCollectionFallback ? localCollectionFilteredResults : searchResults),
-    [localCollectionFilteredResults, searchResults, shouldUseLocalCollectionFallback],
-  );
+  const shouldUseBundledSearchResults = searchQuery.trim().length > 0 && localSearchMatches.length > 0;
+
+  const productsResultsSource = useMemo(() => {
+    if (shouldUseBundledSearchResults) return localSearchMatches;
+    if (shouldUseLocalCollectionFallback) return localCollectionFilteredResults;
+    return searchResults;
+  }, [localCollectionFilteredResults, localSearchMatches, searchResults, shouldUseBundledSearchResults, shouldUseLocalCollectionFallback]);
 
   const productsVisibleSource = useMemo(() => {
-    if (!shouldUseLocalCollectionFallback) return searchResults;
-    return localCollectionFilteredResults.slice(0, productsPage * PRODUCTS_PAGE_SIZE);
-  }, [localCollectionFilteredResults, productsPage, searchResults, shouldUseLocalCollectionFallback]);
+    if (shouldUseBundledSearchResults) {
+      return localSearchMatches.slice(0, productsPage * PRODUCTS_PAGE_SIZE);
+    }
+    if (shouldUseLocalCollectionFallback) {
+      return localCollectionFilteredResults.slice(0, productsPage * PRODUCTS_PAGE_SIZE);
+    }
+    return searchResults;
+  }, [localCollectionFilteredResults, localSearchMatches, productsPage, searchResults, shouldUseBundledSearchResults, shouldUseLocalCollectionFallback]);
 
-  const productsTotalForView = shouldUseLocalCollectionFallback
-    ? localCollectionFilteredResults.length
-    : productsTotal;
-  const productsHasMoreForView = shouldUseLocalCollectionFallback
-    ? localCollectionFilteredResults.length > productsVisibleSource.length
-    : productsHasMore;
+  const productsTotalForView = shouldUseBundledSearchResults
+    ? localSearchMatches.length
+    : shouldUseLocalCollectionFallback
+      ? localCollectionFilteredResults.length
+      : productsTotal;
+  const productsHasMoreForView = shouldUseBundledSearchResults
+    ? localSearchMatches.length > productsVisibleSource.length
+    : shouldUseLocalCollectionFallback
+      ? localCollectionFilteredResults.length > productsVisibleSource.length
+      : productsHasMore;
 
   const availableBrands = useMemo(
     () =>
@@ -1226,6 +1240,25 @@ function AppContent() {
 
     const task = InteractionManager.runAfterInteractions(() => {
       try {
+        if (searchQuery.trim().length > 0 && localSearchMatches.length > 0) {
+          const firstPage = localSearchMatches.slice(0, PRODUCTS_PAGE_SIZE);
+          setProductsTotal(localSearchMatches.length);
+          setProductsHasMore(localSearchMatches.length > firstPage.length);
+          setSearchResults(firstPage);
+          setSearchFacets([]);
+          setSearchVendors(
+            Array.from(
+              new Set(
+                localSearchMatches
+                  .map((item) => item.brand)
+                  .filter((item): item is string => typeof item === 'string' && item.length > 0),
+              ).values(),
+            ).sort((a, b) => a.localeCompare(b, 'ro')),
+          );
+          setCatalogError(null);
+          return;
+        }
+
         const scopedProducts =
           searchQuery.trim().length === 0
             ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
@@ -1273,6 +1306,7 @@ function AppContent() {
     };
   }, [
     brandFilter,
+    localSearchMatches.length,
     onlyDiscount,
     onlyInStock,
     page,
@@ -1606,6 +1640,7 @@ function AppContent() {
     setSearchQuery('');
     setSearchSuggestions([]);
     setSearchPreviewResults([]);
+    setLocalSearchMatches([]);
     setFacetCategoryId('');
   };
 
@@ -1654,10 +1689,42 @@ function AppContent() {
     setSearchPreviewResults(productMatches.slice(0, 6));
   };
 
+  const runBundledSearch = (value: string) => {
+    const query = value.trim().toLowerCase();
+    if (query.length < 2) return [] as CatalogProduct[];
+
+    const index = loadBundledSearchIndex();
+    const matches = index.filter((product) => {
+      const nameMatch = product.name.toLowerCase().includes(query);
+      const brandMatch = product.brand.toLowerCase().includes(query);
+      const skuMatch = product.sku?.toLowerCase().includes(query);
+      const handleMatch = product.handle?.toLowerCase().includes(query);
+      return nameMatch || brandMatch || skuMatch || handleMatch;
+    });
+
+    return matches as CatalogProduct[];
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     setSearchPreviewLoading(true);
-    buildLocalSearchPreview(value);
+
+    const bundledMatches = runBundledSearch(value);
+    if (bundledMatches.length > 0) {
+      const suggestionPool = [
+        ...bundledMatches.slice(0, 8).map((product) => product.name),
+        ...bundledMatches.slice(0, 8).map((product) => product.brand),
+        ...categories
+          .filter((category) => category.name.toLowerCase().includes(value.trim().toLowerCase()))
+          .slice(0, 6)
+          .map((category) => category.name),
+      ];
+      setSearchSuggestions(Array.from(new Set(suggestionPool)).slice(0, 8));
+      setSearchPreviewResults(bundledMatches.slice(0, 6));
+    } else {
+      buildLocalSearchPreview(value);
+    }
+
     setSearchPreviewLoading(false);
   };
 
@@ -1695,7 +1762,19 @@ function AppContent() {
     }
 
     setSearchPreviewLoading(true);
-    buildLocalSearchPreview(query);
+    const bundledMatches = runBundledSearch(query);
+    setLocalSearchMatches(bundledMatches);
+    setProductsPage(1);
+    setProductsTotal(bundledMatches.length);
+    setProductsHasMore(bundledMatches.length > PRODUCTS_PAGE_SIZE);
+    setSearchResults(bundledMatches.slice(0, PRODUCTS_PAGE_SIZE));
+    setSearchPreviewResults(bundledMatches.slice(0, 6));
+    setSearchSuggestions(
+      Array.from(new Set(bundledMatches.slice(0, 8).flatMap((product) => [product.name, product.brand]))).slice(0, 8),
+    );
+    if (page !== 'products') {
+      setPage('products');
+    }
     setSearchPreviewLoading(false);
   };
 
@@ -3280,7 +3359,7 @@ function AppContent() {
     setProductsLoadingMore(true);
 
     try {
-      if (shouldUseLocalCollectionFallback) {
+      if (shouldUseBundledSearchResults || shouldUseLocalCollectionFallback) {
         setProductsPage(nextPage);
         return;
       }
