@@ -297,13 +297,6 @@ export const loadLiveCatalog = async (
   options?: LoadCatalogOptions,
 ): Promise<LiveCatalogPayload> => {
   try {
-    return await loadFromApi({
-      includeCategories: options?.includeCategories ?? true,
-      pageSize: options?.pageSize,
-      startAfterCursor: options?.startAfterCursor,
-      leanQuery: options?.leanQuery ?? true,
-    });
-  } catch {
     const result = await getCatalogFromFn(undefined, options?.pageSize || 250);
     return {
       categories: result.categories as LiveCatalogCategory[],
@@ -311,10 +304,24 @@ export const loadLiveCatalog = async (
       hasMoreProducts: result.hasMoreProducts,
       productsCursor: result.productsCursor,
     };
+  } catch {
+    return loadFromApi({
+      includeCategories: options?.includeCategories ?? true,
+      pageSize: options?.pageSize,
+      startAfterCursor: options?.startAfterCursor,
+      leanQuery: options?.leanQuery ?? true,
+    });
   }
 };
 
 export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> => {
+  try {
+    const result = await getCatalogFromFn(undefined, 1);
+    return { stamp: result.stamp ?? 'updated' };
+  } catch {
+    // fallback to REST API below
+  }
+
   if (isLikelyLocalApiBaseUrl(mobileEnv.apiBaseUrl)) return null;
 
   const baseUrl = mobileEnv.apiBaseUrl.endsWith('/')

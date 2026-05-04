@@ -10,7 +10,7 @@ const firebaseConfig = {
   storageBucket: 'dacus-b40f9.appspot.com',
   messagingSenderId: '000000000000',
   appId: '1:000000000000:mobile:0000000000000000000000',
-  functionsDomain: 'europe-west1-dacus-b40f9.cloudfunctions.net',
+  functionsDomain: 'us-central1-dacus-b40f9.cloudfunctions.net',
 };
 
 const initFunctions = async () => {
@@ -18,11 +18,11 @@ const initFunctions = async () => {
     try {
       const app = getApp();
       const { getFunctions } = await import('firebase/functions');
-      functions = getFunctions(app, 'europe-west1');
+      functions = getFunctions(app, 'us-central1');
     } catch {
       const app = initializeApp(firebaseConfig);
       const { getFunctions } = await import('firebase/functions');
-      functions = getFunctions(app, 'europe-west1');
+      functions = getFunctions(app, 'us-central1');
     }
   }
   return functions;
