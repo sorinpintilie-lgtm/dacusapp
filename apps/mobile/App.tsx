@@ -11,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  InteractionManager,
   Linking,
   Modal,
   SafeAreaView,
@@ -846,6 +847,29 @@ function AppContent() {
   );
   const compareProductIdSet = useMemo(() => new Set(compareProductIds), [compareProductIds]);
 
+  const productsByCategoryIndex = useMemo(() => {
+    const map = new Map<string, CatalogProduct[]>();
+
+    products.forEach((product) => {
+      const membership =
+        Array.isArray(product.categoryIds) && product.categoryIds.length > 0
+          ? product.categoryIds
+          : [product.categoryId];
+
+      membership.forEach((categoryId) => {
+        if (!categoryId) return;
+        const bucket = map.get(categoryId);
+        if (bucket) {
+          bucket.push(product);
+        } else {
+          map.set(categoryId, [product]);
+        }
+      });
+    });
+
+    return map;
+  }, [products]);
+
   const orderedCategoriesForView = useMemo(() => {
     const favorites = new Set(favoriteCategoryIds);
     const ranked = categories.map((category) => ({
@@ -1197,52 +1221,55 @@ function AppContent() {
     if (page !== 'products') return;
 
     setProductsPage(1);
-    setProductsLoadingMore(false);
+    setProductsLoadingMore(true);
 
-    try {
-      const scopedProducts =
-        searchQuery.trim().length === 0
-          ? products.filter((item) => {
-              if (Array.isArray(item.categoryIds) && item.categoryIds.length > 0) {
-                return item.categoryIds.includes(selectedCategoryId);
-              }
-              return item.categoryId === selectedCategoryId;
-            })
-          : products;
+    const task = InteractionManager.runAfterInteractions(() => {
+      try {
+        const scopedProducts =
+          searchQuery.trim().length === 0
+            ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
+            : products;
 
-      const allMatches = filterProducts(scopedProducts, {
-        query: searchQuery,
-        brandFilter,
-        priceFilter,
-        onlyDiscount,
-        onlyInStock,
-        sortOption,
-      });
+        const allMatches = filterProducts(scopedProducts, {
+          query: searchQuery,
+          brandFilter,
+          priceFilter,
+          onlyDiscount,
+          onlyInStock,
+          sortOption,
+        });
 
-      const firstPage = allMatches.slice(0, PRODUCTS_PAGE_SIZE);
-      setProductsTotal(allMatches.length);
-      setProductsHasMore(allMatches.length > firstPage.length);
-      setSearchResults(firstPage);
-      setSearchFacets([]);
-      setSearchVendors(
-        Array.from(
-          new Set(
-            allMatches
-              .map((item) => item.brand)
-              .filter((item): item is string => typeof item === 'string' && item.length > 0),
-          ).values(),
-        ).sort((a, b) => a.localeCompare(b, 'ro')),
-      );
-      setCatalogError(null);
-    } catch (error) {
-      setCatalogError(
-        error instanceof Error ? error.message : 'Catalogul local nu a putut fi filtrat.',
-      );
-      setSearchResults([]);
-      setProductsHasMore(false);
-      setSearchFacets([]);
-      setSearchVendors([]);
-    }
+        const firstPage = allMatches.slice(0, PRODUCTS_PAGE_SIZE);
+        setProductsTotal(allMatches.length);
+        setProductsHasMore(allMatches.length > firstPage.length);
+        setSearchResults(firstPage);
+        setSearchFacets([]);
+        setSearchVendors(
+          Array.from(
+            new Set(
+              allMatches
+                .map((item) => item.brand)
+                .filter((item): item is string => typeof item === 'string' && item.length > 0),
+            ).values(),
+          ).sort((a, b) => a.localeCompare(b, 'ro')),
+        );
+        setCatalogError(null);
+      } catch (error) {
+        setCatalogError(
+          error instanceof Error ? error.message : 'Catalogul local nu a putut fi filtrat.',
+        );
+        setSearchResults([]);
+        setProductsHasMore(false);
+        setSearchFacets([]);
+        setSearchVendors([]);
+      } finally {
+        setProductsLoadingMore(false);
+      }
+    });
+
+    return () => {
+      task.cancel();
+    };
   }, [
     brandFilter,
     onlyDiscount,
@@ -1250,6 +1277,7 @@ function AppContent() {
     page,
     priceFilter,
     products,
+    productsByCategoryIndex,
     searchQuery,
     selectedCategoryId,
     setCatalogError,
@@ -1444,15 +1472,18 @@ function AppContent() {
   };
 
   const openCategory = (categoryId: string) => {
-    persistPreferences((current) => ({
-      ...current,
-      continueBrowsingCategoryIds: [
-        categoryId,
-        ...current.continueBrowsingCategoryIds.filter((item) => item !== categoryId),
-      ].slice(0, CONTINUE_BROWSING_LIMIT),
-    }));
     setSelectedCategoryId(categoryId);
     setPage('products');
+
+    setTimeout(() => {
+      persistPreferences((current) => ({
+        ...current,
+        continueBrowsingCategoryIds: [
+          categoryId,
+          ...current.continueBrowsingCategoryIds.filter((item) => item !== categoryId),
+        ].slice(0, CONTINUE_BROWSING_LIMIT),
+      }));
+    }, 0);
   };
 
   const restorePageWithScroll = (targetPage: Page, scrollY: number) => {
@@ -3244,12 +3275,7 @@ function AppContent() {
       try {
         const scopedProducts =
           searchQuery.trim().length === 0
-            ? products.filter((item) => {
-                if (Array.isArray(item.categoryIds) && item.categoryIds.length > 0) {
-                  return item.categoryIds.includes(selectedCategoryId);
-                }
-                return item.categoryId === selectedCategoryId;
-              })
+            ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
             : products;
 
         const allMatches = filterProducts(scopedProducts, {
@@ -3591,7 +3617,19 @@ function AppContent() {
                 </View>
               ) : null}
 
-              {productList()}
+              {productsLoadingMore && filteredProducts.length === 0 ? (
+                <View style={styles.stackLarge}>
+                  <Skeleton height={18} width="44%" />
+                  <View style={styles.gridWrap}>
+                    <Skeleton height={248} width="48%" />
+                    <Skeleton height={248} width="48%" />
+                    <Skeleton height={248} width="48%" />
+                    <Skeleton height={248} width="48%" />
+                  </View>
+                </View>
+              ) : (
+                productList()
+              )}
             </View>
           }
         />
