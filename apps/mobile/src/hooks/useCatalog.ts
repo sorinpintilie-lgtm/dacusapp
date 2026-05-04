@@ -1,22 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { collection, getDocs } from 'firebase/firestore';
-
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
 import { bundledCatalogBootstrap } from '../data/catalogBootstrap';
 import { loadBundledCategoryProducts } from '../data/catalogChunkIndex';
-import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
-import { getFirebaseDb } from '../services/firebaseAuth';
-import {
-  loadCatalogStamp,
-  loadLiveCatalog,
-  streamLiveCatalogProductsAfterCursor,
-  type LiveCatalogPayload,
-} from '../services/storefront';
+import type { LiveCatalogPayload } from '../services/storefront';
 import { buildProductIndexes } from '../utils/catalogFilters';
 
-const CATALOG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours (once per day at 2 AM)
-const INITIAL_PAGE_SIZE = 250;
 const BUNDLED_CATEGORIES = bundledCatalogBootstrap.categories ?? [];
 const BUNDLED_PRODUCTS = bundledCatalogBootstrap.products ?? [];
 
@@ -47,28 +36,6 @@ const mergeProductsById = (base: CatalogProduct[], incoming: CatalogProduct[]) =
   return Array.from(merged.values());
 };
 
-const loadCatalogFromFirestore = async (): Promise<LiveCatalogPayload> => {
-  const db = getFirebaseDb();
-  const [categoriesSnapshot, productsSnapshot] = await Promise.all([
-    getDocs(collection(db, 'catalog', 'meta', 'categories')),
-    getDocs(collection(db, 'catalog', 'meta', 'products')),
-  ]);
-
-  const categories = categoriesSnapshot.docs
-    .map((doc) => doc.data() as CatalogCategory)
-    .filter((item) => item && typeof item.id === 'string');
-  const products = productsSnapshot.docs
-    .map((doc) => doc.data() as CatalogProduct)
-    .filter((item) => item && typeof item.id === 'string');
-
-  return {
-    categories,
-    products,
-    hasMoreProducts: false,
-    productsCursor: null,
-  };
-};
-
 export const useCatalog = (): CatalogState => {
   const [categories, setCategories] = useState<CatalogCategory[]>(BUNDLED_CATEGORIES);
   const [products, setProducts] = useState<CatalogProduct[]>(BUNDLED_PRODUCTS);
@@ -81,7 +48,6 @@ export const useCatalog = (): CatalogState => {
       ? `Catalog local: ${BUNDLED_PRODUCTS.length} produse pregătite.`
       : 'Catalog local: se pregătește...'
   );
-  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
   const loadedCategoryIdsRef = useRef(
     new Set(
       BUNDLED_PRODUCTS.flatMap((product) =>
@@ -102,7 +68,7 @@ export const useCatalog = (): CatalogState => {
   }, []);
 
   const refreshCatalog = useCallback(() => {
-    setCatalogRefreshKey((value) => value + 1);
+    // Manual no-op for the fully local mode used to isolate UI performance.
   }, []);
 
   const ensureCategoryProductsLoaded = useCallback(async (categoryId: string) => {
@@ -119,221 +85,14 @@ export const useCatalog = (): CatalogState => {
   }, []);
 
   useEffect(() => {
-    let active = true;
-
-    const hydrateCatalog = async () => {
-      console.log('[BOOT][useCatalog] hydrateCatalog start');
-      const cachedEntry = await readCatalogCacheEntry();
-      const cached = cachedEntry?.payload ?? null;
-      const now = Date.now();
-
-      const collectInvalidProductShape = (items: unknown[]) =>
-        items.filter((item) => {
-          if (!item || typeof item !== 'object') return true;
-          const candidate = item as {
-            id?: unknown;
-            brand?: unknown;
-            stockLabel?: unknown;
-            priceRon?: unknown;
-          };
-          return (
-            typeof candidate.id !== 'string' ||
-            candidate.id.length === 0 ||
-            typeof candidate.brand !== 'string' ||
-            candidate.brand.length === 0 ||
-            typeof candidate.stockLabel !== 'string' ||
-            typeof candidate.priceRon !== 'number' ||
-            !Number.isFinite(candidate.priceRon)
-          );
-        });
-
-      const loadRemainingCatalogPages = async (params: {
-        startCursor: string | null;
-        seedProducts: CatalogProduct[];
-        seedCategories: CatalogCategory[];
-        stamp: string | null;
-      }) => {
-        if (!params.startCursor) return;
-
-        let mergedProducts = params.seedProducts;
-        let streamedSoFar = 0;
-
-        try {
-          const streamedTotal = await streamLiveCatalogProductsAfterCursor(
-            params.startCursor,
-            (pageProducts, loadedTotal) => {
-              streamedSoFar = loadedTotal;
-              if (!active || pageProducts.length === 0) return;
-
-              setProducts((prev) => {
-                mergedProducts = mergeProductsById(prev, pageProducts);
-                return mergedProducts;
-              });
-
-              setCatalogMeta(
-                `Catalog live: ${params.seedProducts.length + loadedTotal} produse încărcate.`,
-              );
-            },
-            { pageSize: 150, leanQuery: true },
-          );
-
-          if (!active) return;
-
-          const finalTotal = params.seedProducts.length + streamedTotal;
-          setCatalogMeta(`Catalog live: ${finalTotal} produse încărcate.`);
-
-          if (mergedProducts.length > 0) {
-            await writeCatalogCache(
-              {
-                categories: params.seedCategories,
-                products: mergedProducts,
-                hasMoreProducts: false,
-                productsCursor: null,
-              },
-              { stamp: params.stamp },
-            );
-          }
-        } catch {
-          if (!active) return;
-
-          setCatalogMeta(
-            streamedSoFar > 0
-              ? `Catalog live: ${params.seedProducts.length + streamedSoFar} produse încărcate (sync parțial).`
-              : `Catalog live: ${params.seedProducts.length} produse încărcate (sync extins indisponibil).`,
-          );
-        }
-      };
-
-      if (active && cached) {
-        const invalidCachedProducts = collectInvalidProductShape(cached.products as unknown[]);
-        console.log('[BOOT][useCatalog] cache payload diagnostics', {
-          categories: cached.categories.length,
-          products: cached.products.length,
-          invalidProductShapeCount: invalidCachedProducts.length,
-          cacheAgeMs: cachedEntry ? Math.max(0, now - cachedEntry.cachedAt) : null,
-          stamp: cachedEntry?.stamp ?? null,
-        });
-        if (invalidCachedProducts.length > 0) {
-          const sample = invalidCachedProducts.slice(0, 3);
-          console.error('[BOOT][useCatalog] cache contains products with unexpected shape', {
-            sample,
-          });
-        }
-
-        if (cached.categories.length) {
-          setCategories(cached.categories);
-          setSelectedCategoryId((prev) => prev || cached.categories[0]?.id || '');
-        }
-
-        if (cached.products.length) {
-          setProducts(cached.products);
-          setSelectedProductId((prev) => prev || cached.products[0]?.id || '');
-        }
-
-        setCatalogMeta(`Catalog cache: ${cached.products.length} produse afișate instant.`);
-        setCatalogLoading(false);
-      }
-
-      try {
-        let stampPayload: { stamp: string } | null = null;
-        try {
-          stampPayload = await loadCatalogStamp();
-        } catch {
-          console.warn('[BOOT][useCatalog] stamp fetch failed, using fallback logic');
-        }
-
-        let live: LiveCatalogPayload;
-        try {
-          live = await loadCatalogFromFirestore();
-          if (!active) return;
-
-          const hasFirestoreCatalog = live.categories.length > 0 || live.products.length > 0;
-          if (!hasFirestoreCatalog) {
-            throw new Error('Catalog Firestore gol.');
-          }
-
-          setCatalogMeta(`Catalog Firestore: ${live.products.length} produse încărcate.`);
-        } catch (firestoreError) {
-          try {
-            live = await loadLiveCatalog({
-              pageSize: INITIAL_PAGE_SIZE,
-              leanQuery: true,
-              includeCategories: true,
-            });
-          } catch (liveError) {
-            throw new Error(
-              `firestore=${firestoreError instanceof Error ? firestoreError.message : String(firestoreError)}; live=${liveError instanceof Error ? liveError.message : String(liveError)}`,
-            );
-          }
-        }
-        if (!active) return;
-
-        const invalidLiveProducts = collectInvalidProductShape(live.products as unknown[]);
-        console.log('[BOOT][useCatalog] live payload diagnostics', {
-          categories: live.categories.length,
-          products: live.products.length,
-          hasMoreProducts: live.hasMoreProducts,
-          productsCursor: live.productsCursor,
-          invalidProductShapeCount: invalidLiveProducts.length,
-        });
-        if (invalidLiveProducts.length > 0) {
-          const sample = invalidLiveProducts.slice(0, 3);
-          console.error('[BOOT][useCatalog] live catalog contains products with unexpected shape', {
-            sample,
-          });
-        }
-
-        if (live.categories.length) {
-          setCategories(live.categories);
-          setSelectedCategoryId((prev) => prev || live.categories[0]?.id || '');
-        }
-
-        if (live.products.length) {
-          setProducts(live.products);
-          setSelectedProductId((prev) => prev || live.products[0]?.id || '');
-        }
-
-        await writeCatalogCache(live, { stamp: stampPayload?.stamp ?? null });
-
-        setCatalogMeta(
-          live.hasMoreProducts
-            ? `Catalog live: ${live.products.length} produse încărcate inițial (restul în fundal).`
-            : `Catalog activ: ${live.products.length} produse încărcate.`,
-        );
-
-        if (live.hasMoreProducts && live.productsCursor) {
-          void loadRemainingCatalogPages({
-            startCursor: live.productsCursor,
-            seedProducts: live.products,
-            seedCategories: live.categories,
-            stamp: stampPayload?.stamp ?? null,
-          });
-        }
-
-        setCatalogError(null);
-      } catch (error) {
-        if (!active) return;
-        console.error('[BOOT][useCatalog] hydrateCatalog failed', {
-          error,
-        });
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        setCatalogError(`Nu s-a putut încărca catalogul live momentan. (${errorMessage})`);
-        setCatalogMeta(
-          cached && cached.products.length > 0
-            ? `Catalog cache activ (${cached.products.length} produse). Reîmprospătarea live a eșuat.`
-            : 'Catalog live indisponibil momentan. Reîncearcă în câteva momente.',
-        );
-      } finally {
-        if (active) setCatalogLoading(false);
-      }
-    };
-
-    hydrateCatalog();
-
-    return () => {
-      active = false;
-    };
-  }, [catalogRefreshKey]);
+    setCatalogLoading(false);
+    setCatalogError(null);
+    setCatalogMeta(
+      BUNDLED_PRODUCTS.length > 0
+        ? `Catalog local: ${BUNDLED_PRODUCTS.length} produse de start pregătite.`
+        : 'Catalog local: pregătit fără produse bootstrap.',
+    );
+  }, []);
 
   useEffect(() => {
     if (categories.length > 0 && !categories.some((item) => item.id === selectedCategoryId)) {

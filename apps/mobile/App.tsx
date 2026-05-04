@@ -2,7 +2,6 @@
 import { Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
-import { registerCatalogBackgroundTask } from './src/services/backgroundCatalogRefresh';
 import { initFirebase } from './src/services/firebaseAuth';
 import QRCodeMatrix from './src/components/QRCodeMatrix';
 import {
@@ -444,11 +443,8 @@ function AppContent() {
   useEffect(() => {
     console.log('[BOOT][AppContent] mounted');
 
-    // Initialize Firebase
+    // Initialize Firebase only for auth/cart/account flows.
     initFirebase();
-
-    // Register background catalog refresh task
-    void registerCatalogBackgroundTask();
   }, []);
 
   const scrollRef = useRef<ScrollView>(null);
@@ -1146,7 +1142,6 @@ function AppContent() {
         email: user.email,
       });
       setAccountUser(user);
-      refreshCatalog();
       void Promise.all([
         fetchCart(),
         fetchOrders(),
@@ -3044,7 +3039,6 @@ function AppContent() {
     void loginAccount(email, authPassword)
       .then((user) => {
         setAccountUser(user);
-        refreshCatalog();
         setCatalogError(null);
         setCatalogMeta(`Bine ai revenit, ${user.name}.`);
         return Promise.all([
@@ -3165,7 +3159,6 @@ function AppContent() {
     void registerAccount(email, authPassword, name)
       .then((user) => {
         setAccountUser(user);
-        refreshCatalog();
         setCatalogError(null);
         setCatalogMeta(`Cont creat pentru ${user.name}`);
         return Promise.all([
