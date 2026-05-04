@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "verify:mobile:release": "npm run verify:release -w @dacus/mobile",
+    "sync:catalog:firestore": "node scripts/sync-shopify-catalog-to-firestore.mjs",
     "format": "prettier . --write",
     "format:check": "prettier . --check"
   },
