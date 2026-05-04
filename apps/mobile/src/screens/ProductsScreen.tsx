@@ -73,7 +73,7 @@ export const ProductsScreen = ({
   onClearSearch,
   productListNode,
 }: ProductsScreenProps) => (
-  <View style={styles.stackLarge}>
+  <View style={[styles.pageContainer, styles.stackLarge]}>
     <AnimatedEntrance>
       <View style={styles.catalogHeroCard}>
         <Text style={styles.catalogHeroEyebrow}>CATALOG DACUS</Text>
@@ -350,6 +350,6 @@ export const ProductsScreen = ({
       </View>
     ) : null}
 
-    {productListNode}
+    <View style={styles.pageContainer}>{productListNode}</View>
   </View>
 );

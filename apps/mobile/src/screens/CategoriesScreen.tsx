@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
 
 import type { CatalogCategory } from '../data/catalog';
 import { Skeleton } from '../components/Skeleton';
@@ -23,23 +23,42 @@ export const CategoriesScreen = ({
   countByCategory,
   onOpenCategory,
   hasImageUrl,
-}: CategoriesScreenProps) => (
-  <View style={styles.stackLarge}>
-    <View style={styles.sectionHeadRow}>
-      <Ionicons name="apps-outline" size={22} color={colors.brandRed} />
-      <Text style={styles.pageHeading}>Toate categoriile</Text>
-    </View>
-    <Text style={styles.bodyMuted}>Intră direct în colecția care te interesează.</Text>
-    {isLoading ? (
-      <>
+}: CategoriesScreenProps) => {
+  if (isLoading) {
+    return (
+      <View style={[styles.pageContainer, styles.stackLarge]}>
+        <View style={styles.sectionHeadRow}>
+          <Ionicons name="apps-outline" size={22} color={colors.brandRed} />
+          <Text style={styles.pageHeading}>Toate categoriile</Text>
+        </View>
+        <Text style={styles.bodyMuted}>Intră direct în colecția care te interesează.</Text>
         <Skeleton height={108} />
         <Skeleton height={108} />
         <Skeleton height={108} />
-      </>
-    ) : (
-      categories.map((category) => (
+      </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={categories}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={styles.stackLarge}
+      initialNumToRender={10}
+      maxToRenderPerBatch={8}
+      windowSize={6}
+      removeClippedSubviews
+      ListHeaderComponent={
+        <View>
+          <View style={styles.sectionHeadRow}>
+            <Ionicons name="apps-outline" size={22} color={colors.brandRed} />
+            <Text style={styles.pageHeading}>Toate categoriile</Text>
+          </View>
+          <Text style={styles.bodyMuted}>Intră direct în colecția care te interesează.</Text>
+        </View>
+      }
+      renderItem={({ item: category }) => (
         <TouchableOpacity
-          key={category.id}
           activeOpacity={0.9}
           style={styles.categoryCard}
           onPress={() => onOpenCategory(category.id)}
@@ -64,7 +83,7 @@ export const CategoriesScreen = ({
             <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
           </View>
         </TouchableOpacity>
-      ))
-    )}
-  </View>
-);
+      )}
+    />
+  );
+};

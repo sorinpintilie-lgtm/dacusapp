@@ -2498,7 +2498,7 @@ function AppContent() {
                       {timeline.map((step, index) => (
                         <View key={`${order.id}-${step}`} style={styles.orderTimelineStep}>
                           <Text style={styles.orderTimelineDot}>
-                            {index === timeline.length - 1 ? 'â—' : 'â—‹'}
+                            {index === timeline.length - 1 ? 'â-' : 'â-‹'}
                           </Text>
                           <Text style={styles.orderTimelineText}>{step}</Text>
                         </View>
@@ -2522,7 +2522,7 @@ function AppContent() {
                 return (
                   <View key={address.id} style={styles.accountListRow}>
                     <Text style={styles.bodyText}>
-                      {active ? 'â˜… ' : 'â—‹ '}
+                      {active ? 'â ̃... ' : 'â-‹ '}
                       {address.label}
                     </Text>
                     <Text style={styles.accountListMeta}>
@@ -2602,7 +2602,7 @@ function AppContent() {
                   key={item.id}
                   style={[styles.journeyItem, item.done && styles.journeyItemDone]}
                 >
-                  <Text style={styles.journeyItemIcon}>{item.done ? 'âœ“' : 'â—‹'}</Text>
+                  <Text style={styles.journeyItemIcon}>{item.done ? 'âœ"' : 'â-‹'}</Text>
                   <View style={styles.journeyItemMeta}>
                     <Text style={styles.bodyText}>{item.label}</Text>
                     <Text style={styles.bodyMuted}>{item.done ? 'Completat' : 'În așteptare'}</Text>
@@ -3336,7 +3336,12 @@ function AppContent() {
         data={visibleProducts}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        scrollEnabled={false}
+        scrollEnabled
+        nestedScrollEnabled
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        removeClippedSubviews
         contentContainerStyle={styles.gridListContent}
         columnWrapperStyle={styles.gridRow}
         renderItem={({ item }) => (
@@ -3360,10 +3365,6 @@ function AppContent() {
         onEndReached={() => {
           loadMoreProducts();
         }}
-        initialNumToRender={12}
-        maxToRenderPerBatch={12}
-        windowSize={9}
-        removeClippedSubviews
         ListFooterComponent={
           productsHasMoreForView ? (
             <TouchableOpacity style={styles.loadMoreButton} onPress={loadMoreProducts}>
@@ -3612,7 +3613,7 @@ function AppContent() {
                     ))
                   )}
                   <Text style={styles.bodyMuted}>
-                    Pentru selecție rapidă folosește badge-ul „Compară” din cardurile produselor.
+                    Pentru selecție rapidă folosește badge-ul "Compară" din cardurile produselor.
                   </Text>
                 </View>
               ) : null}
@@ -3919,17 +3920,23 @@ function AppContent() {
         </View>
       ) : null}
 
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        onScroll={onScrollMain}
-        scrollEventThrottle={16}
-        contentContainerStyle={styles.content}
-      >
-        <Animated.View style={[styles.pageContainer, { opacity: pageFadeAnim }]}>
+      {page === 'products' || page === 'categories' ? (
+        <Animated.View style={[styles.pageContainer, { opacity: pageFadeAnim }]}> 
           {renderPage()}
         </Animated.View>
-      </ScrollView>
+      ) : (
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          onScroll={onScrollMain}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.content}
+        >
+          <Animated.View style={[styles.pageContainer, { opacity: pageFadeAnim }]}> 
+            {renderPage()}
+          </Animated.View>
+        </ScrollView>
+      )}
 
       {cartCount > 0 && page !== 'cart' && !isStandaloneAuthPage(page) ? (
         <TouchableOpacity
@@ -5249,7 +5256,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: spacing.sm,
   },
-  gridListContent: { gap: spacing.sm },
+  gridListContent: { gap: spacing.sm, paddingBottom: 120 },
   gridRow: { justifyContent: 'space-between' },
   gridCell: { width: '48.4%' },
   listWrap: { gap: spacing.sm },
