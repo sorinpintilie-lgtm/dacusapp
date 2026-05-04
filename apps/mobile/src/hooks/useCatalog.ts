@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
+import { bundledCatalogSnapshot } from '../data/catalogSnapshot';
 import { readCatalogCacheEntry, writeCatalogCache } from '../services/catalogCache';
 import { getFirebaseDb } from '../services/firebaseAuth';
 import {
@@ -15,6 +16,8 @@ import { buildProductIndexes } from '../utils/catalogFilters';
 
 const CATALOG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours (once per day at 2 AM)
 const INITIAL_PAGE_SIZE = 250;
+const BUNDLED_CATEGORIES = bundledCatalogSnapshot.categories ?? [];
+const BUNDLED_PRODUCTS = bundledCatalogSnapshot.products ?? [];
 
 type CatalogState = {
   categories: CatalogCategory[];
@@ -65,13 +68,17 @@ const loadCatalogFromFirestore = async (): Promise<LiveCatalogPayload> => {
 };
 
 export const useCatalog = (): CatalogState => {
-  const [categories, setCategories] = useState<CatalogCategory[]>([]);
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState('');
-  const [selectedProductId, setSelectedProductId] = useState('');
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [categories, setCategories] = useState<CatalogCategory[]>(BUNDLED_CATEGORIES);
+  const [products, setProducts] = useState<CatalogProduct[]>(BUNDLED_PRODUCTS);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(BUNDLED_CATEGORIES[0]?.id ?? '');
+  const [selectedProductId, setSelectedProductId] = useState(BUNDLED_PRODUCTS[0]?.id ?? '');
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [catalogMeta, setCatalogMeta] = useState('Catalog live: se încarcă...');
+  const [catalogMeta, setCatalogMeta] = useState(
+    BUNDLED_PRODUCTS.length > 0
+      ? `Catalog local: ${BUNDLED_PRODUCTS.length} produse pregătite.`
+      : 'Catalog local: se pregătește...'
+  );
   const [catalogRefreshKey, setCatalogRefreshKey] = useState(0);
 
   const upsertProducts = useCallback((items: CatalogProduct[]) => {

@@ -1197,67 +1197,63 @@ function AppContent() {
     if (page !== 'products') return;
 
     setProductsPage(1);
-    setProductsHasMore(false);
-    setProductsLoadingMore(true);
+    setProductsLoadingMore(false);
 
-    const mapPriceFilter = (value: PriceFilterOption): { min?: number; max?: number } => {
-      if (value === 'sub200') return { max: 199 };
-      if (value === 'intre200si500') return { min: 200, max: 500 };
-      if (value === 'intre500si1000') return { min: 501, max: 1000 };
-      if (value === 'peste1000') return { min: 1001 };
-      return {};
-    };
+    try {
+      const scopedProducts =
+        searchQuery.trim().length === 0
+          ? products.filter((item) => {
+              if (Array.isArray(item.categoryIds) && item.categoryIds.length > 0) {
+                return item.categoryIds.includes(selectedCategoryId);
+              }
+              return item.categoryId === selectedCategoryId;
+            })
+          : products;
 
-    const priceRange = mapPriceFilter(priceFilter);
+      const allMatches = filterProducts(scopedProducts, {
+        query: searchQuery,
+        brandFilter,
+        priceFilter,
+        onlyDiscount,
+        onlyInStock,
+        sortOption,
+      });
 
-    const requestPerPage =
-      searchQuery.trim().length > 0 ? PRODUCTS_PAGE_SIZE * 2 : PRODUCTS_PAGE_SIZE;
-    const effectiveCategoryId = searchQuery.trim().length === 0 ? selectedCategoryId : undefined;
-
-    void fetchProductSearch({
-      query: searchQuery,
-      page: 1,
-      perPage: requestPerPage,
-      sortBy: sortOption,
-      ...(effectiveCategoryId ? { categoryId: effectiveCategoryId } : {}),
-      ...(brandFilter !== 'toate' ? { vendor: brandFilter } : {}),
-      onlyInStock,
-      onlyDiscount,
-      ...(typeof priceRange.min === 'number' ? { priceMin: priceRange.min } : {}),
-      ...(typeof priceRange.max === 'number' ? { priceMax: priceRange.max } : {}),
-      includeFacets: true,
-    })
-      .then((payload) => {
-        const loadedProducts = payload.products;
-        setProductsTotal(payload.total);
-        setProductsHasMore(payload.hasMore);
-        setSearchResults(loadedProducts);
-        upsertProducts(loadedProducts);
-        setSearchFacets(payload.facets ?? []);
-        setSearchVendors(extractVendorsFromFacets(payload.facets));
-      })
-      .catch((error) => {
-        setCatalogError(
-          error instanceof Error ? error.message : 'Căutarea rapidă este indisponibilă momentan.',
-        );
-        setSearchResults([]);
-        setProductsHasMore(false);
-        setSearchFacets([]);
-        setSearchVendors([]);
-      })
-      .finally(() => setProductsLoadingMore(false));
+      const firstPage = allMatches.slice(0, PRODUCTS_PAGE_SIZE);
+      setProductsTotal(allMatches.length);
+      setProductsHasMore(allMatches.length > firstPage.length);
+      setSearchResults(firstPage);
+      setSearchFacets([]);
+      setSearchVendors(
+        Array.from(
+          new Set(
+            allMatches
+              .map((item) => item.brand)
+              .filter((item): item is string => typeof item === 'string' && item.length > 0),
+          ).values(),
+        ).sort((a, b) => a.localeCompare(b, 'ro')),
+      );
+      setCatalogError(null);
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Catalogul local nu a putut fi filtrat.',
+      );
+      setSearchResults([]);
+      setProductsHasMore(false);
+      setSearchFacets([]);
+      setSearchVendors([]);
+    }
   }, [
     brandFilter,
-    facetCategoryId,
     onlyDiscount,
     onlyInStock,
     page,
     priceFilter,
+    products,
     searchQuery,
     selectedCategoryId,
     setCatalogError,
     sortOption,
-    upsertProducts,
   ]);
 
   useEffect(() => {
@@ -3244,47 +3240,39 @@ function AppContent() {
       if (productsLoadingMore || !productsHasMoreForView) return;
       const nextPage = productsPage + 1;
       setProductsLoadingMore(true);
-      const requestPerPage =
-        searchQuery.trim().length > 0 ? PRODUCTS_PAGE_SIZE * 2 : PRODUCTS_PAGE_SIZE;
-      const effectiveCategoryId = searchQuery.trim().length === 0 ? selectedCategoryId : undefined;
 
-      const priceRange = mapPriceFilter(priceFilter);
+      try {
+        const scopedProducts =
+          searchQuery.trim().length === 0
+            ? products.filter((item) => {
+                if (Array.isArray(item.categoryIds) && item.categoryIds.length > 0) {
+                  return item.categoryIds.includes(selectedCategoryId);
+                }
+                return item.categoryId === selectedCategoryId;
+              })
+            : products;
 
-      void fetchProductSearch({
-        query: searchQuery,
-        page: nextPage,
-        perPage: requestPerPage,
-        sortBy: sortOption,
-        ...(effectiveCategoryId ? { categoryId: effectiveCategoryId } : {}),
-        ...(brandFilter !== 'toate' ? { vendor: brandFilter } : {}),
-        onlyInStock,
-        onlyDiscount,
-        ...(typeof priceRange.min === 'number' ? { priceMin: priceRange.min } : {}),
-        ...(typeof priceRange.max === 'number' ? { priceMax: priceRange.max } : {}),
-        includeFacets: true,
-      })
-        .then((payload) => {
-          setProductsPage(payload.page);
-          setProductsTotal(payload.total);
-          setProductsHasMore(payload.hasMore);
-          setSearchResults((current) => {
-            const merged = new Map(current.map((item) => [item.id, item]));
-            payload.products.forEach((item) => merged.set(item.id, item));
-            return Array.from(merged.values());
-          });
-          setSearchFacets((current) => (payload.facets.length > 0 ? payload.facets : current));
-          setSearchVendors((current) => {
-            const extracted = extractVendorsFromFacets(payload.facets);
-            return extracted.length > 0 ? extracted : current;
-          });
-          upsertProducts(payload.products);
-        })
-        .catch((error) => {
-          setCatalogError(
-            error instanceof Error ? error.message : 'Nu s-au putut încărca mai multe produse.',
-          );
-        })
-        .finally(() => setProductsLoadingMore(false));
+        const allMatches = filterProducts(scopedProducts, {
+          query: searchQuery,
+          brandFilter,
+          priceFilter,
+          onlyDiscount,
+          onlyInStock,
+          sortOption,
+        });
+
+        const nextSlice = allMatches.slice(0, nextPage * PRODUCTS_PAGE_SIZE);
+        setProductsPage(nextPage);
+        setProductsTotal(allMatches.length);
+        setProductsHasMore(allMatches.length > nextSlice.length);
+        setSearchResults(nextSlice);
+      } catch (error) {
+        setCatalogError(
+          error instanceof Error ? error.message : 'Nu s-au putut încărca mai multe produse.',
+        );
+      } finally {
+        setProductsLoadingMore(false);
+      }
     };
 
     if (isLoading) {
