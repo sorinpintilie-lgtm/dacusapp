@@ -15,7 +15,8 @@ const SHOPIFY_STOREFRONT_TOKEN =
   '';
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'dacus-b40f9';
 const FIREBASE_SERVICE_ACCOUNT_PATH = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
-const PAGE_SIZE_MAX = 250;
+const PAGE_SIZE_MAX = 100;
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
 const COLLECTIONS_QUERY = `
   query SyncCollections($first: Int!, $after: String) {
@@ -96,30 +97,43 @@ const initFirebase = () => {
   });
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const queryStorefront = async (query, variables) => {
   const endpoint = `https://${SHOPIFY_STORE_DOMAIN}/api/2024-10/graphql.json`;
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Storefront-Access-Token': SHOPIFY_STOREFRONT_TOKEN,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  let attempt = 0;
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Shopify Storefront request failed: ${response.status} ${text.slice(0, 400)}`);
-  }
+  while (true) {
+    attempt += 1;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Storefront-Access-Token': SHOPIFY_STOREFRONT_TOKEN,
+      },
+      body: JSON.stringify({ query, variables }),
+    });
 
-  const payload = await response.json();
-  if (payload.errors?.length) {
-    throw new Error(payload.errors.map((item) => item.message).join('; '));
+    if (!response.ok) {
+      const text = await response.text();
+      if (attempt < 5 && RETRYABLE_STATUS_CODES.has(response.status)) {
+        const delayMs = 800 * attempt;
+        console.warn(`[sync] Shopify temporary failure ${response.status}, retry ${attempt}/4 in ${delayMs}ms`);
+        await sleep(delayMs);
+        continue;
+      }
+      throw new Error(`Shopify Storefront request failed: ${response.status} ${text.slice(0, 400)}`);
+    }
+
+    const payload = await response.json();
+    if (payload.errors?.length) {
+      throw new Error(payload.errors.map((item) => item.message).join('; '));
+    }
+    if (!payload.data) {
+      throw new Error('Shopify Storefront returned no data.');
+    }
+    return payload.data;
   }
-  if (!payload.data) {
-    throw new Error('Shopify Storefront returned no data.');
-  }
-  return payload.data;
 };
 
 const mapCategory = (node) => ({
@@ -224,13 +238,15 @@ const clearCollection = async (collectionRef) => {
   return deleted;
 };
 
+const toFirestoreDocId = (value) => Buffer.from(String(value), 'utf8').toString('base64url');
+
 const writeDocuments = async (collectionRef, items) => {
   let batch = collectionRef.firestore.batch();
   let opCount = 0;
   let written = 0;
 
   for (const item of items) {
-    batch.set(collectionRef.doc(item.id), item);
+    batch.set(collectionRef.doc(toFirestoreDocId(item.id)), item);
     opCount += 1;
     written += 1;
 

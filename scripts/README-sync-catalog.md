@@ -46,6 +46,7 @@ FIREBASE_SERVICE_ACCOUNT_PATH=/cale/catre/service-account.json
   - `catalog/meta/categories`
   - `catalog/meta/products`
 - rescrie tot catalogul în Firestore
+- păstrează ID-ul Shopify în câmpul `id`, dar encodează document IDs Firestore intern pentru a evita caractere invalide
 - actualizează `catalog/stamp`
 
 ## Observație
