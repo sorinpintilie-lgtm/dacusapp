@@ -570,8 +570,10 @@ const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPay
 export const loadLiveCatalog = async (
   options?: LoadCatalogOptions,
 ): Promise<LiveCatalogPayload> => {
+  const after = options?.startAfterCursor ?? undefined;
+
   try {
-    const result = await getCatalogFromFn(options?.startAfterCursor, options?.pageSize || 250);
+    const result = await getCatalogFromFn(after, options?.pageSize || 250);
     return {
       categories: result.categories as LiveCatalogCategory[],
       products: result.products as LiveCatalogProduct[],
@@ -587,12 +589,13 @@ export const loadLiveCatalog = async (
         leanQuery: options?.leanQuery ?? true,
       });
     } catch (apiError) {
-      if (isGuest) {
-        return loadFromStorefrontDirect(options);
+      try {
+        return await loadFromStorefrontDirect(options);
+      } catch (storefrontError) {
+        throw new Error(
+          `callable=${callableError instanceof Error ? callableError.message : String(callableError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}`,
+        );
       }
-      throw new Error(
-        `callable=${callableError instanceof Error ? callableError.message : String(callableError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}`,
-      );
     }
   }
 };
