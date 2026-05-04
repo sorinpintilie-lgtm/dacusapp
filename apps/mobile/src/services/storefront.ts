@@ -574,12 +574,21 @@ export const loadLiveCatalog = async (
 
   try {
     const result = await getCatalogFromFn(after, options?.pageSize || 250);
-    return {
+    const normalizedFromCallable: LiveCatalogPayload = {
       categories: result.categories as LiveCatalogCategory[],
       products: result.products as LiveCatalogProduct[],
       hasMoreProducts: result.hasMoreProducts,
       productsCursor: result.productsCursor,
     };
+
+    const shouldBypassEmptyCallableCache =
+      !after &&
+      normalizedFromCallable.products.length === 0 &&
+      normalizedFromCallable.categories.length === 0;
+
+    if (!shouldBypassEmptyCallableCache) {
+      return normalizedFromCallable;
+    }
   } catch (callableError) {
     try {
       return await loadFromApi({
@@ -596,6 +605,23 @@ export const loadLiveCatalog = async (
           `callable=${callableError instanceof Error ? callableError.message : String(callableError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}`,
         );
       }
+    }
+  }
+
+  try {
+    return await loadFromStorefrontDirect(options);
+  } catch (storefrontError) {
+    try {
+      return await loadFromApi({
+        includeCategories: options?.includeCategories ?? true,
+        pageSize: options?.pageSize,
+        startAfterCursor: options?.startAfterCursor,
+        leanQuery: options?.leanQuery ?? true,
+      });
+    } catch (apiError) {
+      throw new Error(
+        `callable=empty-cache; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}`,
+      );
     }
   }
 };
