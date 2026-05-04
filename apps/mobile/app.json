@@ -35,6 +35,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Dacus folosește locația pentru a trimite notificări despre oferte apropiate.",
         "NSFaceIDUsageDescription": "Dacus folosește Face ID pentru autentificare rapidă și sigură.",
         "UIBackgroundModes": ["remote-notification", "processing"],
+        "BGTaskSchedulerPermittedIdentifiers": ["com.expo.modules.backgroundtask.processing"],
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleURLTypes": [
           {
