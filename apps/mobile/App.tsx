@@ -59,10 +59,8 @@ import {
   fetchLoyaltySummary,
   fetchOrderDetails,
   fetchOrders,
-  fetchSearchSuggestions,
   fetchWishlist,
   generateLoyaltyQr,
-  fetchProductSearch,
   loginAccount,
   logoutAccount,
   markInboxNotificationRead,
@@ -1621,48 +1619,40 @@ function AppContent() {
     setOnlyFavorites((prev) => !prev);
   };
 
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (value.trim().length >= 2) {
-      setSearchPreviewLoading(true);
-      void fetchSearchSuggestions(value)
-        .then((items) => setSearchSuggestions(items))
-        .catch((error) => {
-          console.warn('[Search] Suggestions fetch failed', error);
-          setSearchSuggestions([]);
-        });
-
-      void fetchProductSearch({
-        query: value,
-        page: 1,
-        perPage: 6,
-        sortBy: 'relevanta',
-      })
-        .then((payload) => {
-          console.log('[Search] Preview results arrived', payload.products.length);
-          setSearchPreviewResults(payload.products);
-          upsertProducts(payload.products);
-        })
-        .catch((error) => {
-          console.warn('[Search] Product search failed, using client-side fallback', error);
-          // Fallback: client-side search through existing products
-          const queryLower = value.trim().toLowerCase();
-          const matches = products.filter((product) => {
-            const nameMatch = product.name.toLowerCase().includes(queryLower);
-            const brandMatch = product.brand.toLowerCase().includes(queryLower);
-            const skuMatch = product.sku?.toLowerCase().includes(queryLower);
-            const handleMatch = product.handle?.toLowerCase().includes(queryLower);
-            return nameMatch || brandMatch || skuMatch || handleMatch;
-          });
-          console.log('[Search] Client-side fallback found', matches.length, 'matches');
-          setSearchPreviewResults(matches.slice(0, 6));
-        })
-        .finally(() => setSearchPreviewLoading(false));
-    } else {
+  const buildLocalSearchPreview = (value: string) => {
+    const query = value.trim().toLowerCase();
+    if (query.length < 2) {
       setSearchSuggestions([]);
       setSearchPreviewResults([]);
-      setSearchPreviewLoading(false);
+      return;
     }
+
+    const productMatches = products.filter((product) => {
+      const nameMatch = product.name.toLowerCase().includes(query);
+      const brandMatch = product.brand.toLowerCase().includes(query);
+      const skuMatch = product.sku?.toLowerCase().includes(query);
+      const handleMatch = product.handle?.toLowerCase().includes(query);
+      return nameMatch || brandMatch || skuMatch || handleMatch;
+    });
+
+    const suggestionPool = [
+      ...productMatches.slice(0, 8).map((product) => product.name),
+      ...productMatches.slice(0, 8).map((product) => product.brand),
+      ...categories
+        .filter((category) => category.name.toLowerCase().includes(query))
+        .slice(0, 6)
+        .map((category) => category.name),
+    ];
+
+    setSearchSuggestions(Array.from(new Set(suggestionPool)).slice(0, 8));
+    setSearchPreviewResults(productMatches.slice(0, 6));
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setSearchPreviewLoading(true);
+    buildLocalSearchPreview(value);
+    setSearchPreviewLoading(false);
   };
 
   const handleSearchSubmit = (value: string) => {
@@ -1698,34 +1688,9 @@ function AppContent() {
       );
     }
 
-    void fetchSearchSuggestions(query)
-      .then((items) => setSearchSuggestions(items))
-      .catch(() => setSearchSuggestions([]));
-
     setSearchPreviewLoading(true);
-    void fetchProductSearch({
-      query,
-      page: 1,
-      perPage: 6,
-      sortBy: 'relevanta',
-    })
-      .then((payload) => {
-        setSearchPreviewResults(payload.products);
-        upsertProducts(payload.products);
-      })
-      .catch((error) => {
-        console.warn('[Search] Product search failed on submit, using fallback', error);
-        const queryLower = query.toLowerCase();
-        const matches = products.filter((product) => {
-          const nameMatch = product.name.toLowerCase().includes(queryLower);
-          const brandMatch = product.brand.toLowerCase().includes(queryLower);
-          const skuMatch = product.sku?.toLowerCase().includes(queryLower);
-          const handleMatch = product.handle?.toLowerCase().includes(queryLower);
-          return nameMatch || brandMatch || skuMatch || handleMatch;
-        });
-        setSearchPreviewResults(matches.slice(0, 6));
-      })
-      .finally(() => setSearchPreviewLoading(false));
+    buildLocalSearchPreview(query);
+    setSearchPreviewLoading(false);
   };
 
   const handleSearchProductSelect = (productId: string) => {
