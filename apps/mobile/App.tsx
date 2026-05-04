@@ -8,7 +8,6 @@ import {
   Share,
   Alert,
   Dimensions,
-  FlatList,
   Image,
   InteractionManager,
   Linking,
@@ -3268,126 +3267,38 @@ function AppContent() {
       .finally(() => setAuthBusy(false));
   };
 
-  const productList = () => {
-    const visibleProducts = filteredProducts;
+  const loadMoreProducts = () => {
+    if (productsLoadingMore || !productsHasMoreForView) return;
+    const nextPage = productsPage + 1;
+    setProductsLoadingMore(true);
 
-    const mapPriceFilter = (value: PriceFilterOption): { min?: number; max?: number } => {
-      if (value === 'sub200') return { max: 199 };
-      if (value === 'intre200si500') return { min: 200, max: 500 };
-      if (value === 'intre500si1000') return { min: 501, max: 1000 };
-      if (value === 'peste1000') return { min: 1001 };
-      return {};
-    };
+    try {
+      const scopedProducts =
+        searchQuery.trim().length === 0
+          ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
+          : products;
 
-    const loadMoreProducts = () => {
-      if (productsLoadingMore || !productsHasMoreForView) return;
-      const nextPage = productsPage + 1;
-      setProductsLoadingMore(true);
+      const allMatches = filterProducts(scopedProducts, {
+        query: searchQuery,
+        brandFilter,
+        priceFilter,
+        onlyDiscount,
+        onlyInStock,
+        sortOption,
+      });
 
-      try {
-        const scopedProducts =
-          searchQuery.trim().length === 0
-            ? (productsByCategoryIndex.get(selectedCategoryId) ?? [])
-            : products;
-
-        const allMatches = filterProducts(scopedProducts, {
-          query: searchQuery,
-          brandFilter,
-          priceFilter,
-          onlyDiscount,
-          onlyInStock,
-          sortOption,
-        });
-
-        const nextSlice = allMatches.slice(0, nextPage * PRODUCTS_PAGE_SIZE);
-        setProductsPage(nextPage);
-        setProductsTotal(allMatches.length);
-        setProductsHasMore(allMatches.length > nextSlice.length);
-        setSearchResults(nextSlice);
-      } catch (error) {
-        setCatalogError(
-          error instanceof Error ? error.message : 'Nu s-au putut încărca mai multe produse.',
-        );
-      } finally {
-        setProductsLoadingMore(false);
-      }
-    };
-
-    if (isLoading) {
-      return (
-        <View style={styles.stackLarge}>
-          <Skeleton height={18} width="44%" />
-          <View style={styles.gridWrap}>
-            <Skeleton height={248} width="48%" />
-            <Skeleton height={248} width="48%" />
-            <Skeleton height={248} width="48%" />
-            <Skeleton height={248} width="48%" />
-          </View>
-        </View>
+      const nextSlice = allMatches.slice(0, nextPage * PRODUCTS_PAGE_SIZE);
+      setProductsPage(nextPage);
+      setProductsTotal(allMatches.length);
+      setProductsHasMore(allMatches.length > nextSlice.length);
+      setSearchResults(nextSlice);
+    } catch (error) {
+      setCatalogError(
+        error instanceof Error ? error.message : 'Nu s-au putut încărca mai multe produse.',
       );
+    } finally {
+      setProductsLoadingMore(false);
     }
-
-    if (filteredProducts.length === 0) {
-      return (
-        <View style={styles.emptyStateCard}>
-          <Text style={styles.emptyStateTitle}>Nu există produse pentru filtrarea curentă</Text>
-          <Text style={styles.emptyText}>
-            Încearcă să resetezi filtrele sau să alegi o categorie diferită.
-          </Text>
-          <View style={styles.emptyStateActions}>
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetFilters}>
-              <Text style={styles.secondaryButtonText}>Resetează filtrele</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <FlatList
-        data={visibleProducts}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        scrollEnabled
-        nestedScrollEnabled
-        initialNumToRender={8}
-        maxToRenderPerBatch={6}
-        windowSize={5}
-        removeClippedSubviews
-        contentContainerStyle={styles.gridListContent}
-        columnWrapperStyle={styles.gridRow}
-        renderItem={({ item }) => (
-          <View style={styles.gridCell}>
-            <ProductCard
-              product={item}
-              onOpen={openProduct}
-              onAdd={addToCart}
-              compareMode={compareMode}
-              compareSelected={compareProductIdSet.has(item.id)}
-              compareDisabled={
-                compareMode &&
-                !compareProductIdSet.has(item.id) &&
-                compareProductIds.length >= COMPARE_PRODUCTS_LIMIT
-              }
-              onToggleCompare={toggleCompareProduct}
-            />
-          </View>
-        )}
-        onEndReachedThreshold={0.55}
-        onEndReached={() => {
-          loadMoreProducts();
-        }}
-        ListFooterComponent={
-          productsHasMoreForView ? (
-            <TouchableOpacity style={styles.loadMoreButton} onPress={loadMoreProducts}>
-              <Text style={styles.loadMoreButtonText}>
-                {productsLoadingMore ? 'Se încarcă...' : 'Afișează mai multe produse'}
-              </Text>
-            </TouchableOpacity>
-          ) : null
-        }
-      />
-    );
   };
 
   const onScrollMain = (event: { nativeEvent: { contentOffset: { y: number } } }) => {
@@ -3536,115 +3447,24 @@ function AppContent() {
           onSetCategoryFacet={setCategoryFacet}
           onSetSortOption={setSortOption}
           onClearSearch={clearSearch}
-          productListNode={
-            <View style={[styles.stackSmall, styles.pageContainer]}>
-              <View style={styles.compareToolbar}>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={saveCurrentFiltersAsPreset}
-                >
-                  <Text style={styles.secondaryButtonText}>Salvează preset</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setCompareMode((prev) => !prev)}
-                >
-                  <Text style={styles.secondaryButtonText}>
-                    {compareMode ? 'Ieși din comparare' : 'Compare mode'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {filterPresets.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterChipRow}
-                >
-                  {filterPresets.map((preset) => (
-                    <View key={preset.id} style={styles.filterPresetWrap}>
-                      <TouchableOpacity
-                        style={styles.filterPill}
-                        onPress={() => applyFilterPreset(preset.id)}
-                      >
-                        <Text style={styles.filterPillText}>{preset.name}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.filterPresetDelete}
-                        onPress={() => deleteFilterPreset(preset.id)}
-                      >
-                        <Text style={styles.filterPresetDeleteText}>×</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : null}
-
-              {compareMode ? (
-                <View style={styles.comparePanel}>
-                  <View style={styles.comparePanelHead}>
-                    <View style={styles.comparePanelTitleWrap}>
-                      <Text style={styles.comparePanelTitle}>Compare mode activ</Text>
-                      <Text style={styles.comparePanelMeta}>
-                        {compareProducts.length}/{COMPARE_PRODUCTS_LIMIT} produse selectate
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        styles.compareClearButton,
-                        compareProducts.length === 0 && styles.compareClearButtonDisabled,
-                      ]}
-                      onPress={clearCompareProducts}
-                      disabled={compareProducts.length === 0}
-                    >
-                      <Text style={styles.compareClearButtonText}>Golește</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {compareProducts.length === 0 ? (
-                    <Text style={styles.bodyMuted}>
-                      Selectează produse din lista de mai jos pentru comparație.
-                    </Text>
-                  ) : (
-                    compareProducts.map((product) => (
-                      <View key={product.id} style={styles.compareRow}>
-                        <View style={styles.compareInfo}>
-                          <Text style={styles.bodyText}>{safeText(product.name)}</Text>
-                          <Text style={styles.bodyMuted}>
-                            {safeText(product.brand)} · {formatPrice(product.priceRon)} ·{' '}
-                            {safeText(product.stockLabel)}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.secondaryButton}
-                          onPress={() => toggleCompareProduct(product.id)}
-                        >
-                          <Text style={styles.secondaryButtonText}>Elimină</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))
-                  )}
-                  <Text style={styles.bodyMuted}>
-                    Pentru selecție rapidă folosește badge-ul "Compară" din cardurile produselor.
-                  </Text>
-                </View>
-              ) : null}
-
-              {productsLoadingMore && filteredProducts.length === 0 ? (
-                <View style={styles.stackLarge}>
-                  <Skeleton height={18} width="44%" />
-                  <View style={styles.gridWrap}>
-                    <Skeleton height={248} width="48%" />
-                    <Skeleton height={248} width="48%" />
-                    <Skeleton height={248} width="48%" />
-                    <Skeleton height={248} width="48%" />
-                  </View>
-                </View>
-              ) : (
-                productList()
-              )}
-            </View>
-          }
+          products={filteredProducts}
+          productsLoadingMore={productsLoadingMore}
+          productsHasMoreForView={productsHasMoreForView}
+          compareMode={compareMode}
+          compareProductIds={compareProductIds}
+          compareProducts={compareProducts}
+          filterPresets={filterPresets.map((preset) => ({ id: preset.id, name: preset.name }))}
+          compareProductsLimit={COMPARE_PRODUCTS_LIMIT}
+          onSaveCurrentFiltersAsPreset={saveCurrentFiltersAsPreset}
+          onToggleCompareMode={() => setCompareMode((prev) => !prev)}
+          onApplyFilterPreset={applyFilterPreset}
+          onDeleteFilterPreset={deleteFilterPreset}
+          onClearCompareProducts={clearCompareProducts}
+          onToggleCompareProduct={toggleCompareProduct}
+          onOpenProduct={openProduct}
+          onAddToCart={addToCart}
+          onLoadMoreProducts={loadMoreProducts}
+          isLoading={isLoading}
         />
       );
     }

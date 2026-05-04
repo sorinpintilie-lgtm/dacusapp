@@ -1,10 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 
+import { ProductCard } from '../components/ProductCard';
+import { Skeleton } from '../components/Skeleton';
 import { AnimatedEntrance, CollapsibleFilterPanel, SemanticPill } from '../components/UXComponents';
+import type { CatalogProduct } from '../data/catalog';
 import { colors } from '../theme/tokens';
-import type { PriceFilterOption, SortOption } from '../utils/catalogFilters';
+import { formatPrice, type PriceFilterOption, type SortOption } from '../utils/catalogFilters';
 import type { ScreenStyles } from './screenTypes';
+
+type FilterPreset = {
+  id: string;
+  name: string;
+};
 
 type ProductsScreenProps = {
   styles: ScreenStyles;
@@ -37,7 +45,24 @@ type ProductsScreenProps = {
   onSetCategoryFacet: (value: string) => void;
   onSetSortOption: (value: SortOption) => void;
   onClearSearch: () => void;
-  productListNode: React.ReactNode;
+  products: CatalogProduct[];
+  productsLoadingMore: boolean;
+  productsHasMoreForView: boolean;
+  compareMode: boolean;
+  compareProductIds: string[];
+  compareProducts: CatalogProduct[];
+  filterPresets: FilterPreset[];
+  compareProductsLimit: number;
+  onSaveCurrentFiltersAsPreset: () => void;
+  onToggleCompareMode: () => void;
+  onApplyFilterPreset: (presetId: string) => void;
+  onDeleteFilterPreset: (presetId: string) => void;
+  onClearCompareProducts: () => void;
+  onToggleCompareProduct: (productId: string) => void;
+  onOpenProduct: (productId: string) => void;
+  onAddToCart: (productId: string) => void;
+  onLoadMoreProducts: () => void;
+  isLoading: boolean;
 };
 
 export const ProductsScreen = ({
@@ -71,285 +96,421 @@ export const ProductsScreen = ({
   onSetCategoryFacet,
   onSetSortOption,
   onClearSearch,
-  productListNode,
-}: ProductsScreenProps) => (
-  <View style={[styles.pageContainer, styles.stackLarge]}>
-    <AnimatedEntrance>
-      <View style={styles.catalogHeroCard}>
-        <Text style={styles.catalogHeroEyebrow}>CATALOG DACUS</Text>
-        <Text style={styles.catalogHeroTitle}>{selectedCategoryName}</Text>
-        <Text style={styles.catalogHeroMeta}>
-          {searchQuery.trim()
-            ? `${productsTotalForView || filteredProductsCount} rezultate pentru „${searchQuery.trim()}”`
-            : `${filteredProductsCount} din ${productsTotalForView || filteredProductsCount} produse în colecție`}
-        </Text>
-
-        <View style={styles.productsCountPill}>
-          <Text style={styles.productsCountPillText}>{filteredProductsCount} produse vizibile</Text>
-        </View>
-
-        {facetConfidenceHints.length > 0 ? (
-          <View style={styles.collectionScopeRow}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChipRow}
-            >
-              {facetConfidenceHints.map((hint) => (
-                <SemanticPill key={hint.label} label={hint.label} tone={hint.tone} />
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        <View style={styles.catalogHeroActionsRow}>
-          <TouchableOpacity style={styles.catalogActionPill} onPress={onCycleSort}>
-            <Ionicons name="swap-vertical-outline" size={16} color={colors.brandRed} />
-            <Text style={styles.catalogActionPillText}>Sortare: {sortLabel}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.catalogActionPill, onlyFavorites && styles.catalogActionPillActive]}
-            onPress={onToggleFavorites}
-          >
-            <Ionicons
-              name={onlyFavorites ? 'heart' : 'heart-outline'}
-              size={16}
-              color={onlyFavorites ? '#FFFFFF' : colors.brandRed}
-            />
-            <Text
-              style={[
-                styles.catalogActionPillText,
-                onlyFavorites && styles.catalogActionPillTextActive,
-              ]}
-            >
-              {onlyFavorites ? 'Doar favorite' : 'Include favorite'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.catalogActionPill} onPress={onResetFilters}>
-            <Ionicons name="refresh-outline" size={16} color={colors.brandRed} />
-            <Text style={styles.catalogActionPillText}>Resetează filtre</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </AnimatedEntrance>
-
-    <View style={styles.collectionScopeRow}>
-      <Text style={styles.collectionScopeText}>Colecție selectată: {selectedCategoryName}</Text>
-      <TouchableOpacity style={styles.collectionScopeButton} onPress={onOpenCategories}>
-        <Text style={styles.collectionScopeButtonText}>Schimbă colecția</Text>
-      </TouchableOpacity>
-    </View>
-
-    <AnimatedEntrance delay={80}>
-      <View style={styles.filterPanel}>
-        <CollapsibleFilterPanel filterCount={filterCount} title="Filtrare avansată">
-          <Text style={styles.filterIntroText}>
-            Alege rapid brand, preț și disponibilitate pentru a ajunge mai repede la produsul dorit.
+  products,
+  productsLoadingMore,
+  productsHasMoreForView,
+  compareMode,
+  compareProductIds,
+  compareProducts,
+  filterPresets,
+  compareProductsLimit,
+  onSaveCurrentFiltersAsPreset,
+  onToggleCompareMode,
+  onApplyFilterPreset,
+  onDeleteFilterPreset,
+  onClearCompareProducts,
+  onToggleCompareProduct,
+  onOpenProduct,
+  onAddToCart,
+  onLoadMoreProducts,
+  isLoading,
+}: ProductsScreenProps) => {
+  const header = (
+    <View style={styles.stackLarge}>
+      <AnimatedEntrance>
+        <View style={styles.catalogHeroCard}>
+          <Text style={styles.catalogHeroEyebrow}>CATALOG DACUS</Text>
+          <Text style={styles.catalogHeroTitle}>{selectedCategoryName}</Text>
+          <Text style={styles.catalogHeroMeta}>
+            {searchQuery.trim()
+              ? `${productsTotalForView || filteredProductsCount} rezultate pentru „${searchQuery.trim()}”`
+              : `${filteredProductsCount} din ${productsTotalForView || filteredProductsCount} produse în colecție`}
           </Text>
-          <View style={styles.filterHeadRow}>
-            <Text style={styles.filterTitle}>Filtre active</Text>
-            <TouchableOpacity style={styles.resetFilterButton} onPress={onResetFilters}>
-              <Text style={styles.resetFilterText}>Resetează</Text>
-            </TouchableOpacity>
+
+          <View style={styles.productsCountPill}>
+            <Text style={styles.productsCountPillText}>{filteredProductsCount} produse vizibile</Text>
           </View>
 
-          {categoryFacetOptions.length > 0 ? (
-            <>
-              <Text style={styles.filterLabel}>Categorii populare</Text>
+          {facetConfidenceHints.length > 0 ? (
+            <View style={styles.collectionScopeRow}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.filterChipRow}
               >
-                {categoryFacetOptions.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.filterPill, item.active && styles.filterPillActive]}
-                    onPress={() => onSetCategoryFacet(item.id)}
-                  >
-                    <Text
-                      style={[styles.filterPillText, item.active && styles.filterPillTextActive]}
-                    >
-                      {item.label} ({item.count})
-                    </Text>
-                  </TouchableOpacity>
+                {facetConfidenceHints.map((hint) => (
+                  <SemanticPill key={hint.label} label={hint.label} tone={hint.tone} />
                 ))}
               </ScrollView>
-            </>
+            </View>
           ) : null}
 
-          <Text style={styles.filterLabel}>Brand</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipRow}
-          >
+          <View style={styles.catalogHeroActionsRow}>
+            <TouchableOpacity style={styles.catalogActionPill} onPress={onCycleSort}>
+              <Ionicons name="swap-vertical-outline" size={16} color={colors.brandRed} />
+              <Text style={styles.catalogActionPillText}>Sortare: {sortLabel}</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.filterPill, brandFilter === 'toate' && styles.filterPillActive]}
-              onPress={() => onSetBrandFilter('toate')}
+              style={[styles.catalogActionPill, onlyFavorites && styles.catalogActionPillActive]}
+              onPress={onToggleFavorites}
             >
+              <Ionicons
+                name={onlyFavorites ? 'heart' : 'heart-outline'}
+                size={16}
+                color={onlyFavorites ? '#FFFFFF' : colors.brandRed}
+              />
               <Text
                 style={[
-                  styles.filterPillText,
-                  brandFilter === 'toate' && styles.filterPillTextActive,
+                  styles.catalogActionPillText,
+                  onlyFavorites && styles.catalogActionPillTextActive,
                 ]}
               >
-                Toate brandurile
+                {onlyFavorites ? 'Doar favorite' : 'Include favorite'}
               </Text>
             </TouchableOpacity>
-            {availableBrands.map((brand) => (
+
+            <TouchableOpacity style={styles.catalogActionPill} onPress={onResetFilters}>
+              <Ionicons name="refresh-outline" size={16} color={colors.brandRed} />
+              <Text style={styles.catalogActionPillText}>Resetează filtre</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </AnimatedEntrance>
+
+      <View style={styles.collectionScopeRow}>
+        <Text style={styles.collectionScopeText}>Colecție selectată: {selectedCategoryName}</Text>
+        <TouchableOpacity style={styles.collectionScopeButton} onPress={onOpenCategories}>
+          <Text style={styles.collectionScopeButtonText}>Schimbă colecția</Text>
+        </TouchableOpacity>
+      </View>
+
+      <AnimatedEntrance delay={80}>
+        <View style={styles.filterPanel}>
+          <CollapsibleFilterPanel filterCount={filterCount} title="Filtrare avansată">
+            <Text style={styles.filterIntroText}>
+              Alege rapid brand, preț și disponibilitate pentru a ajunge mai repede la produsul dorit.
+            </Text>
+            <View style={styles.filterHeadRow}>
+              <Text style={styles.filterTitle}>Filtre active</Text>
+              <TouchableOpacity style={styles.resetFilterButton} onPress={onResetFilters}>
+                <Text style={styles.resetFilterText}>Resetează</Text>
+              </TouchableOpacity>
+            </View>
+
+            {categoryFacetOptions.length > 0 ? (
+              <>
+                <Text style={styles.filterLabel}>Categorii populare</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+                  {categoryFacetOptions.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.filterPill, item.active && styles.filterPillActive]}
+                      onPress={() => onSetCategoryFacet(item.id)}
+                    >
+                      <Text style={[styles.filterPillText, item.active && styles.filterPillTextActive]}>
+                        {item.label} ({item.count})
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+
+            <Text style={styles.filterLabel}>Brand</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
               <TouchableOpacity
-                key={brand}
-                style={[styles.filterPill, brandFilter === brand && styles.filterPillActive]}
-                onPress={() => onSetBrandFilter(brand)}
+                style={[styles.filterPill, brandFilter === 'toate' && styles.filterPillActive]}
+                onPress={() => onSetBrandFilter('toate')}
               >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    brandFilter === brand && styles.filterPillTextActive,
-                  ]}
-                >
-                  {brand}
-                  {brandFacetCounts[brand] ? ` (${brandFacetCounts[brand]})` : ''}
+                <Text style={[styles.filterPillText, brandFilter === 'toate' && styles.filterPillTextActive]}>
+                  Toate brandurile
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.filterLabel}>Preț</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipRow}
-          >
-            {[
-              { key: 'toate', label: 'Toate prețurile' },
-              { key: 'sub200', label: 'Sub 200 RON' },
-              { key: 'intre200si500', label: '200-500 RON' },
-              { key: 'intre500si1000', label: '500-1000 RON' },
-              { key: 'peste1000', label: 'Peste 1000 RON' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[styles.filterPill, priceFilter === item.key && styles.filterPillActive]}
-                onPress={() => onSetPriceFilter(item.key as PriceFilterOption)}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    priceFilter === item.key && styles.filterPillTextActive,
-                  ]}
+              {availableBrands.map((brand) => (
+                <TouchableOpacity
+                  key={brand}
+                  style={[styles.filterPill, brandFilter === brand && styles.filterPillActive]}
+                  onPress={() => onSetBrandFilter(brand)}
                 >
-                  {item.label}
+                  <Text style={[styles.filterPillText, brandFilter === brand && styles.filterPillTextActive]}>
+                    {brand}
+                    {brandFacetCounts[brand] ? ` (${brandFacetCounts[brand]})` : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.filterLabel}>Preț</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+              {[
+                { key: 'toate', label: 'Toate prețurile' },
+                { key: 'sub200', label: 'Sub 200 RON' },
+                { key: 'intre200si500', label: '200-500 RON' },
+                { key: 'intre500si1000', label: '500-1000 RON' },
+                { key: 'peste1000', label: 'Peste 1000 RON' },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[styles.filterPill, priceFilter === item.key && styles.filterPillActive]}
+                  onPress={() => onSetPriceFilter(item.key as PriceFilterOption)}
+                >
+                  <Text style={[styles.filterPillText, priceFilter === item.key && styles.filterPillTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.toggleChip, onlyDiscount && styles.toggleChipActive]}
+                onPress={onToggleOnlyDiscount}
+              >
+                <Text style={[styles.toggleChipText, onlyDiscount && styles.toggleChipTextActive]}>
+                  Doar promoții
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+              <TouchableOpacity
+                style={[styles.toggleChip, onlyInStock && styles.toggleChipActive]}
+                onPress={() => onSetOnlyInStock(true)}
+              >
+                <Text style={[styles.toggleChipText, onlyInStock && styles.toggleChipTextActive]}>
+                  În stoc ({availabilityFacetCounts.inStock})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleChip, !onlyInStock && styles.toggleChipActive]}
+                onPress={() => onSetOnlyInStock(false)}
+              >
+                <Text style={[styles.toggleChipText, !onlyInStock && styles.toggleChipTextActive]}>
+                  Toate ({availabilityFacetCounts.inStock + availabilityFacetCounts.outOfStock})
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.toggleRow}>
-            <TouchableOpacity
-              style={[styles.toggleChip, onlyDiscount && styles.toggleChipActive]}
-              onPress={onToggleOnlyDiscount}
-            >
-              <Text style={[styles.toggleChipText, onlyDiscount && styles.toggleChipTextActive]}>
-                Doar promoții
-              </Text>
+            <Text style={styles.filterLabel}>Sortare</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+              {[
+                { key: 'relevanta', label: 'Relevanță' },
+                { key: 'pretCrescator', label: 'Preț crescător' },
+                { key: 'pretDescrescator', label: 'Preț descrescător' },
+                { key: 'numeAZ', label: 'Nume A-Z' },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[styles.filterPill, sortOption === item.key && styles.filterPillActive]}
+                  onPress={() => onSetSortOption(item.key as SortOption)}
+                >
+                  <Text style={[styles.filterPillText, sortOption === item.key && styles.filterPillTextActive]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.filterSummary}>{filterCount} filtre active</Text>
+          </CollapsibleFilterPanel>
+        </View>
+      </AnimatedEntrance>
+
+      {filterCount > 0 || searchQuery.trim().length > 0 ? (
+        <View style={styles.activeFilterWrap}>
+          {searchQuery.trim().length > 0 ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={onClearSearch}>
+              <Text style={styles.activeFilterChipText}>Căutare: {searchQuery.trim()} ✕</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleChip, onlyInStock && styles.toggleChipActive]}
-              onPress={() => onSetOnlyInStock(true)}
-            >
-              <Text style={[styles.toggleChipText, onlyInStock && styles.toggleChipTextActive]}>
-                În stoc ({availabilityFacetCounts.inStock})
-              </Text>
+          ) : null}
+          {brandFilter !== 'toate' ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={() => onSetBrandFilter('toate')}>
+              <Text style={styles.activeFilterChipText}>Brand: {brandFilter} ✕</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleChip, !onlyInStock && styles.toggleChipActive]}
-              onPress={() => onSetOnlyInStock(false)}
-            >
-              <Text style={[styles.toggleChipText, !onlyInStock && styles.toggleChipTextActive]}>
-                Toate ({availabilityFacetCounts.inStock + availabilityFacetCounts.outOfStock})
+          ) : null}
+          {priceFilter !== 'toate' ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={() => onSetPriceFilter('toate')}>
+              <Text style={styles.activeFilterChipText}>Preț: {priceFilter} ✕</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onlyDiscount ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleOnlyDiscount}>
+              <Text style={styles.activeFilterChipText}>Promoții ✕</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onlyInStock ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleOnlyInStock}>
+              <Text style={styles.activeFilterChipText}>În stoc ✕</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onlyFavorites ? (
+            <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleFavorites}>
+              <Text style={styles.activeFilterChipText}>Favorite ✕</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.compareToolbar}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onSaveCurrentFiltersAsPreset}>
+          <Text style={styles.secondaryButtonText}>Salvează preset</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onToggleCompareMode}>
+          <Text style={styles.secondaryButtonText}>
+            {compareMode ? 'Ieși din comparare' : 'Compare mode'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {filterPresets.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+          {filterPresets.map((preset) => (
+            <View key={preset.id} style={styles.filterPresetWrap}>
+              <TouchableOpacity style={styles.filterPill} onPress={() => onApplyFilterPreset(preset.id)}>
+                <Text style={styles.filterPillText}>{preset.name}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.filterPresetDelete} onPress={() => onDeleteFilterPreset(preset.id)}>
+                <Text style={styles.filterPresetDeleteText}>×</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+
+      {compareMode ? (
+        <View style={styles.comparePanel}>
+          <View style={styles.comparePanelHead}>
+            <View style={styles.comparePanelTitleWrap}>
+              <Text style={styles.comparePanelTitle}>Compare mode activ</Text>
+              <Text style={styles.comparePanelMeta}>
+                {compareProducts.length}/{compareProductsLimit} produse selectate
               </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.compareClearButton,
+                compareProducts.length === 0 && styles.compareClearButtonDisabled,
+              ]}
+              onPress={onClearCompareProducts}
+              disabled={compareProducts.length === 0}
+            >
+              <Text style={styles.compareClearButtonText}>Golește</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.filterLabel}>Sortare</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterChipRow}
-          >
-            {[
-              { key: 'relevanta', label: 'Relevanță' },
-              { key: 'pretCrescator', label: 'Preț crescător' },
-              { key: 'pretDescrescator', label: 'Preț descrescător' },
-              { key: 'numeAZ', label: 'Nume A-Z' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={[styles.filterPill, sortOption === item.key && styles.filterPillActive]}
-                onPress={() => onSetSortOption(item.key as SortOption)}
-              >
-                <Text
-                  style={[
-                    styles.filterPillText,
-                    sortOption === item.key && styles.filterPillTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {compareProducts.length === 0 ? (
+            <Text style={styles.bodyMuted}>
+              Selectează produse din lista de mai jos pentru comparație.
+            </Text>
+          ) : (
+            compareProducts.map((product) => (
+              <View key={product.id} style={styles.compareRow}>
+                <View style={styles.compareInfo}>
+                  <Text style={styles.bodyText}>{product.name}</Text>
+                  <Text style={styles.bodyMuted}>
+                    {product.brand} · {formatPrice(product.priceRon)} · {product.stockLabel}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => onToggleCompareProduct(product.id)}>
+                  <Text style={styles.secondaryButtonText}>Elimină</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+          <Text style={styles.bodyMuted}>
+            Pentru selecție rapidă folosește badge-ul "Compară" din cardurile produselor.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
 
-          <Text style={styles.filterSummary}>{filterCount} filtre active</Text>
-        </CollapsibleFilterPanel>
+  if (isLoading || (productsLoadingMore && products.length === 0)) {
+    return (
+      <View style={styles.pageContainer}>
+        <FlatList
+          data={[1, 2, 3, 4]}
+          keyExtractor={(item) => String(item)}
+          numColumns={2}
+          contentContainerStyle={styles.gridListContent}
+          columnWrapperStyle={styles.gridRow}
+          ListHeaderComponent={header}
+          renderItem={() => (
+            <View style={styles.gridCell}>
+              <Skeleton height={248} width="100%" />
+            </View>
+          )}
+        />
       </View>
-    </AnimatedEntrance>
+    );
+  }
 
-    {filterCount > 0 || searchQuery.trim().length > 0 ? (
-      <View style={styles.activeFilterWrap}>
-        {searchQuery.trim().length > 0 ? (
-          <TouchableOpacity style={styles.activeFilterChip} onPress={onClearSearch}>
-            <Text style={styles.activeFilterChipText}>Căutare: {searchQuery.trim()} ✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        {brandFilter !== 'toate' ? (
-          <TouchableOpacity
-            style={styles.activeFilterChip}
-            onPress={() => onSetBrandFilter('toate')}
-          >
-            <Text style={styles.activeFilterChipText}>Brand: {brandFilter} ✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        {priceFilter !== 'toate' ? (
-          <TouchableOpacity
-            style={styles.activeFilterChip}
-            onPress={() => onSetPriceFilter('toate')}
-          >
-            <Text style={styles.activeFilterChipText}>Preț: {priceFilter} ✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        {onlyDiscount ? (
-          <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleOnlyDiscount}>
-            <Text style={styles.activeFilterChipText}>Promoții ✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        {onlyInStock ? (
-          <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleOnlyInStock}>
-            <Text style={styles.activeFilterChipText}>În stoc ✕</Text>
-          </TouchableOpacity>
-        ) : null}
-        {onlyFavorites ? (
-          <TouchableOpacity style={styles.activeFilterChip} onPress={onToggleFavorites}>
-            <Text style={styles.activeFilterChipText}>Favorite ✕</Text>
-          </TouchableOpacity>
-        ) : null}
+  if (products.length === 0) {
+    return (
+      <View style={styles.pageContainer}>
+        <FlatList
+          data={[] as CatalogProduct[]}
+          keyExtractor={(item) => item.id}
+          renderItem={() => null}
+          ListHeaderComponent={header}
+          ListEmptyComponent={
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateTitle}>Nu există produse pentru filtrarea curentă</Text>
+              <Text style={styles.emptyText}>
+                Încearcă să resetezi filtrele sau să alegi o categorie diferită.
+              </Text>
+              <View style={styles.emptyStateActions}>
+                <TouchableOpacity style={styles.secondaryButton} onPress={onResetFilters}>
+                  <Text style={styles.secondaryButtonText}>Resetează filtrele</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+        />
       </View>
-    ) : null}
+    );
+  }
 
-    <View style={styles.pageContainer}>{productListNode}</View>
-  </View>
-);
+  return (
+    <View style={styles.pageContainer}>
+      <FlatList
+        data={products}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        removeClippedSubviews
+        contentContainerStyle={styles.gridListContent}
+        columnWrapperStyle={styles.gridRow}
+        ListHeaderComponent={header}
+        renderItem={({ item }) => (
+          <View style={styles.gridCell}>
+            <ProductCard
+              product={item}
+              onOpen={onOpenProduct}
+              onAdd={onAddToCart}
+              compareMode={compareMode}
+              compareSelected={compareProductIds.includes(item.id)}
+              compareDisabled={
+                compareMode && !compareProductIds.includes(item.id) && compareProductIds.length >= compareProductsLimit
+              }
+              onToggleCompare={onToggleCompareProduct}
+            />
+          </View>
+        )}
+        onEndReachedThreshold={0.55}
+        onEndReached={onLoadMoreProducts}
+        ListFooterComponent={
+          productsHasMoreForView ? (
+            <TouchableOpacity style={styles.loadMoreButton} onPress={onLoadMoreProducts}>
+              <Text style={styles.loadMoreButtonText}>
+                {productsLoadingMore ? 'Se încarcă...' : 'Afișează mai multe produse'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ height: 120 }} />
+          )
+        }
+      />
+    </View>
+  );
+};
