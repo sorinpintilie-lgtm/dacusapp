@@ -384,7 +384,7 @@ export function OfflineBanner({ visible, onRetry }: OfflineBannerProps) {
 
   return (
     <View style={styles.offlineBanner}>
-      <Ionicons name="wifi-off-outline" size={16} color="#FFFFFF" />
+      <Ionicons name="wifi-outline" size={16} color="#FFFFFF" />
       <Text style={styles.offlineText}>Ești offline. Unele funcționalități pot fi limitate.</Text>
       {onRetry && (
         <TouchableOpacity onPress={onRetry} style={styles.retryButton}>

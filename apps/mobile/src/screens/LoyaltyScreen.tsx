@@ -80,7 +80,7 @@ export const LoyaltyScreen = ({
       <View style={styles.loyaltyHero}>
         <View style={styles.loyaltyHeroTop}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-            <Ionicons name="award-outline" size={22} color={colors.brandAmber} />
+            <Ionicons name="star-outline" size={22} color={colors.brandAmber} />
             <Text style={styles.loyaltyTitle}>Program de fidelitate</Text>
           </View>
           <Text style={styles.loyaltyTierTag}>{loyalty.tier}</Text>
@@ -242,39 +242,42 @@ export const LoyaltyScreen = ({
              </Text>
            ) : null}
            {voucherQrToken ? (
-              <View style={styles.stackSmall}>
+            <View style={styles.stackSmall}>
+              <TouchableOpacity
+                style={styles.qrWrap}
+                activeOpacity={0.9}
+                onPress={onOpenVoucherQrPreview}
+              >
+                <QRCodeMatrix value={voucherQrToken} size={220} />
+              </TouchableOpacity>
+              <Text style={styles.bodyMuted}>
+                Arată acest voucher la casă pentru a aplica reducerea.
+              </Text>
+              <View style={styles.loyaltyTokenActions}>
                 <TouchableOpacity
-                  style={styles.qrWrap}
-                  activeOpacity={0.9}
-                  onPress={onOpenLoyaltyQrPreview}
+                  style={[
+                    styles.secondaryButton,
+                    { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+                  ]}
+                  onPress={onShareVoucher}
                 >
-                  <QRCodeMatrix value={loyaltyQrToken} size={220} />
+                  <Ionicons name="share-outline" size={16} color={colors.brandRed} />
+                  <Text style={styles.secondaryButtonText}>Partajează voucherul</Text>
                 </TouchableOpacity>
-                <Text style={styles.bodyMuted}>
-                  Arată acest cod la casă pentru puncte și beneficii.
-                </Text>
-                <View style={styles.loyaltyTokenActions}>
-                  <TouchableOpacity
-                    style={[styles.secondaryButton, { flexDirection: 'row', alignItems: 'center', gap: spacing.xs }]}
-                    onPress={onShareQrToken}
-                  >
-                    <Ionicons name="share-outline" size={16} color={colors.brandRed} />
-                    <Text style={styles.secondaryButtonText}>Partajează codul</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
-         ) : loyaltyQrLoading ? (
-           <Text style={styles.bodyMuted}>Se generează codul QR...</Text>
-         ) : (
-           <>
-             <Text style={styles.bodyMuted}>
-               {loyaltyQrError ?? 'Codul QR nu este disponibil momentan.'}
-             </Text>
-             <TouchableOpacity style={styles.secondaryButton} onPress={onRetryLoyaltyQr}>
-               <Text style={styles.secondaryButtonText}>Reîncearcă generarea codului QR</Text>
-             </TouchableOpacity>
-           </>
-         )}
+            </View>
+          ) : loyaltyQrLoading ? (
+            <Text style={styles.bodyMuted}>Se generează codul QR...</Text>
+          ) : (
+            <>
+              <Text style={styles.bodyMuted}>
+                {loyaltyQrError ?? 'Codul QR nu este disponibil momentan.'}
+              </Text>
+              <TouchableOpacity style={styles.secondaryButton} onPress={onRetryLoyaltyQr}>
+                <Text style={styles.secondaryButtonText}>Reîncearcă generarea codului QR</Text>
+              </TouchableOpacity>
+            </>
+          )}
          </View>
         ) : null}
 

@@ -15,6 +15,14 @@ export type EmptyStateIcon =
   | 'wifi'
   | 'error';
 
+export type EmptyStateConfig = {
+  icon: EmptyStateIcon;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
 /**
  * Icon component that renders different icons based on type
  */

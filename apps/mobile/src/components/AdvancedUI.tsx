@@ -256,7 +256,7 @@ export function QuantitySelector({
         onPress={increase}
         disabled={value >= max}
       >
-        <Ionicons name="plus" size={16} color={value >= max ? colors.border : colors.textPrimary} />
+        <Ionicons name="add" size={16} color={value >= max ? colors.border : colors.textPrimary} />
       </TouchableOpacity>
     </View>
   );

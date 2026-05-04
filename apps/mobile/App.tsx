@@ -2321,7 +2321,7 @@ function AppContent() {
               <Text style={styles.accountQrLoadingText}>Se generează codul...</Text>
             </View>
           ) : profileQrError ? (
-            <View style={styles.accountQrError}>
+            <View style={styles.accountQrErrorContainer}>
               <MaterialCommunityIcons name="barcode-off" size={32} color="#EF4444" />
               <Text style={styles.accountQrErrorText}>{profileQrError}</Text>
               <TouchableOpacity style={styles.accountQrRetryButton} onPress={retryLoadProfileQr}>
@@ -4394,6 +4394,7 @@ const styles = StyleSheet.create({
   cartButtonText: { color: '#FFFFFF', fontSize: typography.caption, fontWeight: '800' },
   scroll: { flex: 1, backgroundColor: colors.surfaceAlt },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: 140 },
+  pageContainer: { flex: 1 },
   stackLarge: { gap: spacing.lg },
   stackSmall: { gap: spacing.sm, flex: 1, minWidth: 0 },
   pageHeading: {
@@ -5610,8 +5611,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
   },
-  totalLabel: { color: colors.textSecondary, fontSize: typography.body },
-  totalValue: { color: colors.brandBlack, fontWeight: '900', fontSize: typography.h2 },
+  cartTotalLabel: { color: colors.textSecondary, fontSize: typography.body },
+  cartTotalValue: { color: colors.brandBlack, fontWeight: '900', fontSize: typography.h2 },
   totalValueLarge: { color: colors.brandBlack, fontWeight: '900', fontSize: typography.h1 },
   loadingContainer: {
     flex: 1,
@@ -5622,13 +5623,13 @@ const styles = StyleSheet.create({
   },
 
   // Cart Screen Styles
-  cartHeader: {
+  cartHeaderLegacy: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.sm,
   },
-  checkoutSummary: {
+  checkoutSummaryLegacy: {
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
     padding: spacing.lg,
@@ -5708,7 +5709,7 @@ const styles = StyleSheet.create({
   formHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   formTitle: { fontSize: typography.body, color: colors.brandAmber, fontWeight: '600' },
   formFields: { gap: spacing.sm },
-  addressInput: {
+  addressInputLegacy: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -5717,7 +5718,7 @@ const styles = StyleSheet.create({
     color: colors.brandBlack,
   },
   addressInputHalf: { flex: 1 },
-  addressRow: { flexDirection: 'row', gap: spacing.sm },
+  addressRowLegacy: { flexDirection: 'row', gap: spacing.sm },
   savedAddressButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -5756,7 +5757,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   productDetails: { flex: 1, gap: spacing.sm },
-  productName: {
+  cartProductName: {
     fontSize: typography.body,
     color: colors.brandBlack,
     fontWeight: '600',
@@ -5764,7 +5765,7 @@ const styles = StyleSheet.create({
   },
   productVariant: { fontSize: typography.caption, color: colors.textSecondary },
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productPrice: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '700' },
+  cartProductPrice: { fontSize: typography.body, color: colors.brandBlack, fontWeight: '700' },
   productSubtotal: { fontSize: typography.caption, color: colors.brandGreen, fontWeight: '600' },
   stockWarning: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   stockWarningText: { fontSize: typography.caption, color: '#F59E0B' },
@@ -5815,7 +5816,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   accountAvatarContainer: { position: 'relative' },
-  accountAvatar: {
+  accountAvatarLarge: {
     width: 80,
     height: 80,
     borderRadius: radii.xl,
@@ -5823,7 +5824,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  accountAvatarText: { color: '#FFFFFF', fontSize: typography.h2, fontWeight: '900' },
+  accountAvatarTextLarge: { color: '#FFFFFF', fontSize: typography.h2, fontWeight: '900' },
   editProfileButton: {
     position: 'absolute',
     top: -4,
@@ -5873,7 +5874,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   accountStatNumber: { fontSize: typography.h2, color: colors.brandBlack, fontWeight: '900' },
-  accountStatLabel: {
+  accountStatLabelCentered: {
     fontSize: typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
@@ -5938,7 +5939,7 @@ const styles = StyleSheet.create({
   accountQrActionText: { fontSize: typography.caption, color: colors.brandBlue, fontWeight: '600' },
   accountQrLoading: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
   accountQrLoadingText: { fontSize: typography.caption, color: colors.textSecondary },
-  accountQrError: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  accountQrErrorContainer: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
   accountQrErrorText: { fontSize: typography.caption, color: '#EF4444', textAlign: 'center' },
   accountQrRetryButton: {
     backgroundColor: colors.brandRed,
@@ -6723,21 +6724,4 @@ const styles = StyleSheet.create({
   },
   memberSubtext: { color: colors.textSecondary, fontSize: typography.caption },
   qrPlaceholder: { alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  accountQrLoading: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
-  accountQrLoadingText: { fontSize: typography.caption, color: colors.textSecondary },
-
-  // Redesigned Cart Screen Styles
-  cartHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  checkoutSummary: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
 });

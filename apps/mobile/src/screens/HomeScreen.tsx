@@ -217,7 +217,7 @@ export const HomeScreen = ({
             <Text style={styles.homePromoBadgeMeta}>oferte clare, direct în app</Text>
           </View>
           <View style={styles.homePromoBadge}>
-            <Ionicons name="award-outline" size={16} color={colors.brandAmber} />
+            <Ionicons name="star-outline" size={16} color={colors.brandAmber} />
             <Text style={styles.homePromoBadgeTitle}>Fidelitate</Text>
             <Text style={styles.homePromoBadgeMeta}>puncte și vouchere la fiecare comandă</Text>
           </View>
@@ -438,7 +438,7 @@ export const HomeScreen = ({
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={onOpenLoyalty}>
               <Ionicons
-                name="award-outline"
+                name="star-outline"
                 size={16}
                 color={colors.brandRed}
                 style={{ marginRight: spacing.xs }}

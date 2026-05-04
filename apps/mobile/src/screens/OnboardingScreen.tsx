@@ -47,7 +47,7 @@ const ONBOARDING_SLIDES: OnboardingSlide[] = [
     title: 'Program de fidelitate',
     subtitle:
       'Acumulează puncte pentru fiecare comandă și rabdă vouchere valoroase. Fii Silver sau Gold!',
-    icon: 'award-outline',
+    icon: 'star-outline',
     iconColor: colors.brandAmber,
   },
   {

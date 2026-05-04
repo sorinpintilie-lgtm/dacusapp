@@ -26,7 +26,7 @@ const navConfig: Array<{ target: Page; label: string; icon: IconName; activeIcon
   { target: 'home', label: 'Acasă', icon: 'home-outline', activeIcon: 'home' },
   { target: 'categories', label: 'Categorii', icon: 'grid-outline', activeIcon: 'grid' },
   { target: 'cart', label: 'Coș', icon: 'cart-outline', activeIcon: 'cart' },
-  { target: 'loyalty', label: 'Fidelitate', icon: 'award-outline', activeIcon: 'award' },
+  { target: 'loyalty', label: 'Fidelitate', icon: 'star-outline', activeIcon: 'star' },
   { target: 'account', label: 'Cont', icon: 'person-outline', activeIcon: 'person' },
 ];
 

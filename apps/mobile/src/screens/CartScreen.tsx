@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image, Text, TouchableOpacity, View } from 'react-native';
 
+import { InlineError } from '../components/ErrorHandling';
+import { EmptyCartState } from '../components/EmptyStates';
+import { Skeleton } from '../components/Skeleton';
+import { AnimatedEntrance } from '../components/UXComponents';
+import type { CatalogProduct } from '../data/catalog';
+import type { Address, CartLine } from '../services/commerce';
 import { colors, spacing } from '../theme/tokens';
+import { formatPrice } from '../utils/catalogFilters';
+import { fixRomanianMojibake } from '../utils/string';
 import type { ScreenStyles } from './screenTypes';
 
 type CartItem = CartLine & {
@@ -10,6 +18,11 @@ type CartItem = CartLine & {
   variantName?: string;
   stockRiskLabel?: string;
 };
+
+type CheckoutAddressDraft = Pick<
+  Address,
+  'label' | 'fullName' | 'phone' | 'line1' | 'line2' | 'city' | 'county' | 'postalCode' | 'countryCode'
+>;
 
 type CartScreenProps = {
   styles: ScreenStyles;
@@ -23,6 +36,8 @@ type CartScreenProps = {
   checkoutBusy: boolean;
   deliveryEtaLabel: string;
   priceChangeExplanation: string | null;
+  checkoutAddressDraft?: CheckoutAddressDraft | null;
+  onUpdateCheckoutAddressField?: (field: keyof CheckoutAddressDraft, value: string) => void;
   onChangeQuantity: (productId: string, variantId: string | undefined, delta: number) => void;
   onRemoveLine: (productId: string, variantId: string | undefined) => void;
   onCheckout: () => void;
