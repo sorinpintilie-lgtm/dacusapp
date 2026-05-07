@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Firestore } from 'firebase-admin/firestore';
 
-import { createCommerceStore, type CommerceStore } from '../services/commerceStore.js';
+import { createCommerceStore, createInMemoryCommerceStore, type CommerceStore } from '../services/commerceStore.js';
 import {
   buildAuthError,
   buildSignedQrToken,
@@ -46,7 +46,7 @@ const sanitizeUser = (user: { id: string; email: string; name: string; createdAt
 });
 
 export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (fastify, options) => {
-  const store = options.store ?? createCommerceStore(options.firestore ?? null);
+  const store = options.store ?? (options.firestore ? createCommerceStore(options.firestore) : createInMemoryCommerceStore());
 
   fastify.post(
     '/auth/register',

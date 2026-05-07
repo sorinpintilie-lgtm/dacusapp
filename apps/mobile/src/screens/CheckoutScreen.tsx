@@ -125,24 +125,11 @@ export const CheckoutScreen = ({
         <View style={styles.cardPlain}>
           <View style={styles.sectionHeadRow}>
             <Ionicons name="location-outline" size={18} color={colors.brandBlue} />
-            <Text style={styles.sectionLabel}>Adresă de livrare</Text>
+            <Text style={styles.sectionLabel}>Livrare și plată</Text>
           </View>
-          {shippingAddress ? (
-            <>
-              <Text style={styles.bodyText}>{shippingAddress.fullName}</Text>
-              <Text style={styles.bodyMuted}>{shippingAddress.phone}</Text>
-              <Text style={styles.bodyMuted}>
-                {shippingAddress.line1}
-                {shippingAddress.line2 ? `, ${shippingAddress.line2}` : ''}
-              </Text>
-              <Text style={styles.bodyMuted}>
-                {shippingAddress.city}, {shippingAddress.county}, {shippingAddress.postalCode}
-              </Text>
-              <Text style={styles.bodyMuted}>{shippingAddress.countryCode}</Text>
-            </>
-          ) : (
-            <Text style={styles.bodyMuted}>Nu ai adresă de livrare.</Text>
-          )}
+          <Text style={styles.bodyMuted}>
+            Adresa de livrare și informațiile de plată vor fi colectate de către Shopify pentru finalizarea comenzii.
+          </Text>
         </View>
       </AnimatedEntrance>
 

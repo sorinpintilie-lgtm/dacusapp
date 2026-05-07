@@ -35,6 +35,12 @@ type AppPreferences = {
       unitPriceRon?: number;
     }>;
   }>;
+  guestCart: Array<{
+    productId: string;
+    variantId?: string;
+    quantity: number;
+    unitPriceRon?: number;
+  }>;
   preferenceOnboarding: {
     completed: boolean;
     favoriteBrands: string[];
@@ -111,6 +117,7 @@ const defaultPreferences = (): AppPreferences => ({
   filterPresets: [],
   compareProductIds: [],
   savedCartLists: [],
+  guestCart: [],
   preferenceOnboarding: {
     completed: false,
     favoriteBrands: [],
@@ -168,6 +175,12 @@ const normalizePreferences = (value: unknown): AppPreferences => {
             !!item && typeof item === 'object',
         )
       : fallback.savedCartLists,
+    guestCart: Array.isArray(parsed.guestCart)
+      ? parsed.guestCart.filter(
+          (item): item is AppPreferences['guestCart'][number] =>
+            !!item && typeof item === 'object' && typeof item.productId === 'string',
+        )
+      : fallback.guestCart,
     preferenceOnboarding:
       parsed.preferenceOnboarding && typeof parsed.preferenceOnboarding === 'object'
         ? {
@@ -339,6 +352,20 @@ export const updateAppPreferences = async (
   const next = normalizePreferences(updater(current));
   await setAppPreferences(next);
   return next;
+};
+
+export const getGuestCart = async (): Promise<AppPreferences['guestCart']> => {
+  const prefs = await getAppPreferences();
+  return prefs.guestCart ?? [];
+};
+
+export const updateGuestCart = async (
+  cart: AppPreferences['guestCart'],
+): Promise<void> => {
+  await updateAppPreferences((current) => ({
+    ...current,
+    guestCart: cart,
+  }));
 };
 
 export type { StoredSession };

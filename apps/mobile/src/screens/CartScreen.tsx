@@ -12,6 +12,9 @@ import { formatPrice } from '../utils/catalogFilters';
 import { fixRomanianMojibake } from '../utils/string';
 import type { ScreenStyles } from './screenTypes';
 
+const hasImageUrl = (value: string | undefined): value is string =>
+  !!value && /^https?:\/\//.test(value);
+
 type CartItem = CartLine & {
   product: CatalogProduct;
   unitPriceRon: number;
@@ -26,35 +29,23 @@ type CheckoutAddressDraft = Pick<
 
 type CartScreenProps = {
   styles: ScreenStyles;
-  isLoading: boolean;
   cartItems: CartItem[];
   cartTotal: number;
   cartError: string | null;
-  selectedAddress: Address | null;
-  addressesCount: number;
-  addressBusy: boolean;
   checkoutBusy: boolean;
   deliveryEtaLabel: string;
   priceChangeExplanation: string | null;
-  checkoutAddressDraft?: CheckoutAddressDraft | null;
-  onUpdateCheckoutAddressField?: (field: keyof CheckoutAddressDraft, value: string) => void;
   onChangeQuantity: (productId: string, variantId: string | undefined, delta: number) => void;
   onRemoveLine: (productId: string, variantId: string | undefined) => void;
   onCheckout: () => void;
   onOpenProducts: () => void;
-  onSelectOrAddAddress: () => void;
-  hasImageUrl: (value: string | undefined) => value is string;
 };
 
 export const CartScreen = ({
   styles,
-  isLoading,
   cartItems,
   cartTotal,
   cartError,
-  selectedAddress,
-  addressesCount,
-  addressBusy,
   checkoutBusy,
   deliveryEtaLabel,
   priceChangeExplanation,
@@ -62,8 +53,6 @@ export const CartScreen = ({
   onRemoveLine,
   onCheckout,
   onOpenProducts,
-  onSelectOrAddAddress,
-  hasImageUrl,
 }: CartScreenProps) => {
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -103,39 +92,13 @@ export const CartScreen = ({
       <AnimatedEntrance delay={40}>
         <View style={styles.cardPlain}>
           <View style={styles.sectionHeadRow}>
-            <Ionicons name="location-outline" size={18} color={colors.brandBlue} />
-            <Text style={styles.sectionLabel}>Adresă de livrare</Text>
+            <Ionicons name="cube-outline" size={18} color={colors.brandBlue} />
+            <Text style={styles.sectionLabel}>Livrare și plată</Text>
           </View>
           <Text style={styles.bodyMuted}>{deliveryEtaLabel}</Text>
-          {selectedAddress ? (
-            <>
-              <Text style={styles.bodyText}>{selectedAddress.label}</Text>
-              <Text style={styles.bodyMuted}>
-                {selectedAddress.fullName} · {selectedAddress.phone}
-              </Text>
-              <Text style={styles.bodyMuted}>
-                {selectedAddress.line1}
-                {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}, {selectedAddress.city},{' '}
-                {selectedAddress.county}, {selectedAddress.postalCode},{' '}
-                {selectedAddress.countryCode}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.bodyMuted}>Nu există adresă selectată pentru livrare.</Text>
-          )}
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={onSelectOrAddAddress}
-            disabled={addressBusy}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {addressBusy
-                ? 'Se actualizează...'
-                : addressesCount > 0
-                  ? 'Schimbă adresa de livrare'
-                  : 'Adaugă adresa de livrare'}
-            </Text>
-          </TouchableOpacity>
+          <Text style={styles.bodyMuted}>
+            Adresa de livrare și informațiile de plată vor fi colectate de către Shopify.
+          </Text>
 
           {priceChangeExplanation ? (
             <Text style={styles.bodyMuted}>{priceChangeExplanation}</Text>
@@ -143,12 +106,7 @@ export const CartScreen = ({
         </View>
       </AnimatedEntrance>
 
-      {isLoading ? (
-        <>
-          <Skeleton height={90} />
-          <Skeleton height={90} />
-        </>
-      ) : cartItems.length === 0 ? (
+      {cartItems.length === 0 ? (
         <EmptyCartState onBrowseProducts={onOpenProducts} />
       ) : (
         <>

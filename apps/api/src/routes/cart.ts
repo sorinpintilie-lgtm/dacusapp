@@ -5,6 +5,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import {
   createCommerceStore,
+  createInMemoryCommerceStore,
   type CartLine,
   type CommerceStore,
   type Order,
@@ -115,20 +116,51 @@ const queryStorefront = async <T>(
 ): Promise<T> => {
   const shopifyStoreDomain = (options.shopifyStoreDomain ?? '').trim();
   const storefrontToken = (options.storefrontToken ?? '').trim();
+  console.log(`[STOREFRONT] Domain: ${shopifyStoreDomain}, Token configured: ${storefrontToken !== 'replace-with-storefront-token'}`);
   if (!shopifyStoreDomain || !storefrontToken)
     throw new Error('Storefront checkout is not configured.');
+  if (storefrontToken === 'replace-with-storefront-token')
+    throw new Error('Storefront token not configured. Please set SHOPIFY_STOREFRONT_TOKEN in .env file.');
 
-  const endpoint = `https://${shopifyStoreDomain}/api/2024-10/graphql.json`;
+  const endpoint = `https://${shopifyStoreDomain}/api/2024-04/graphql.json`;
+  console.log(`[STOREFRONT] Making request to: ${endpoint}`);
+  console.log(`[STOREFRONT] Using token: ${storefrontToken.substring(0, 10)}...`);
+
+  const requestBody = JSON.stringify({ query, variables });
+  console.log(`[STOREFRONT] Request body length: ${requestBody.length}`);
+  console.log(`[STOREFRONT] Query preview:`, query.substring(0, 100) + '...');
+
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Shopify-Storefront-Access-Token': storefrontToken,
     },
-    body: JSON.stringify({ query, variables }),
+    body: requestBody,
   });
 
-  if (!response.ok) throw new Error(`Storefront request failed with status ${response.status}`);
+  console.log(`[STOREFRONT] Response status: ${response.status}`);
+  console.log(`[STOREFRONT] Response headers:`, Object.fromEntries(response.headers.entries()));
+
+  if (!response.ok) {
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch (e) {
+      responseText = 'Could not read response body';
+    }
+    console.error(`[STOREFRONT] Response body:`, responseText);
+
+    if (response.status === 404) {
+      throw new Error(`Store not found or API endpoint incorrect. Status: ${response.status}, Body: ${responseText}`);
+    } else if (response.status === 401) {
+      throw new Error(`Authentication failed - invalid storefront token. Status: ${response.status}, Body: ${responseText}`);
+    } else if (response.status === 403) {
+      throw new Error(`Access forbidden - storefront API not enabled or permissions missing. Status: ${response.status}, Body: ${responseText}`);
+    } else {
+      throw new Error(`Storefront request failed with status ${response.status}: ${responseText}`);
+    }
+  }
   const payload = (await response.json()) as StorefrontGraphQLResponse<T>;
   if (payload.errors?.length) throw new Error(payload.errors.map((e) => e.message).join('; '));
   if (!payload.data) throw new Error('Storefront response does not include data.');
@@ -321,7 +353,7 @@ const addNotificationWithPush = async (
 };
 
 export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify, options) => {
-  const store = options.store ?? createCommerceStore(options.firestore ?? null);
+  const store = options.store ?? (options.firestore ? createCommerceStore(options.firestore) : createInMemoryCommerceStore());
 
   fastify.get('/cart', async (request, reply) => {
     const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);
@@ -668,6 +700,254 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
         currency: order.currency,
         notifiedDevices,
       };
+    },
+  );
+
+  fastify.post(
+    '/cart/checkout-guest',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const body = (request.body ?? {}) as {
+        currency?: string;
+        lines: CartLine[];
+        address: {
+          fullName?: string;
+          phone?: string;
+          line1?: string;
+          line2?: string;
+          city?: string;
+          county?: string;
+          postalCode?: string;
+          countryCode?: string;
+        };
+        deviceId: string;
+      };
+
+      const currency = (body.currency ?? 'RON').toUpperCase();
+      const { lines, address, deviceId } = body;
+
+      // Validate required fields
+      if (!lines || lines.length === 0) {
+        reply.code(400);
+        return { error: 'Cart is empty.' };
+      }
+
+      // Address is optional for guest checkout - Shopify will handle it
+
+      try {
+        // Validate cart lines against Shopify storefront
+        console.log('[GUEST_CHECKOUT] Validating cart lines:', lines);
+        const validation = await resolveCartAgainstStorefront(options, lines, false);
+        console.log('[GUEST_CHECKOUT] Validation result:', {
+          issuesCount: validation.issues.length,
+          resolvedLinesCount: validation.resolvedLines.length,
+          issues: validation.issues,
+        });
+
+        if (validation.issues.length > 0 || validation.resolvedLines.length === 0) {
+          console.error('[GUEST_CHECKOUT] Cart validation failed:', validation.issues);
+          reply.code(400);
+          return {
+            error: 'Cart validation failed.',
+            errorRo: 'Coșul conține produse invalide.',
+            issues: validation.issues,
+          };
+        }
+
+        const normalizedLines = validation.resolvedLines.map((item) => item.line);
+        console.log('[GUEST_CHECKOUT] Resolved merchandise IDs:', validation.resolvedLines.map(item => ({
+          productId: item.line.productId,
+          merchandiseId: item.merchandiseId,
+          quantity: item.line.quantity,
+        })));
+
+        // Create guest checkout using deviceId as identifier
+        // Address is optional - use default if not provided
+        const checkoutAddress = {
+          id: `guest-${deviceId}-${Date.now()}`,
+          label: 'Adresă guest',
+          fullName: address?.fullName?.trim() || 'Client Guest',
+          phone: address?.phone?.trim() || '',
+          line1: address?.line1?.trim() || '',
+          line2: address?.line2?.trim() || '',
+          city: address?.city?.trim() || '',
+          county: address?.county?.trim() || '',
+          postalCode: address?.postalCode?.trim() || '',
+          countryCode: address?.countryCode?.trim() || 'RO',
+        };
+
+        let checkoutUrl = '';
+
+        // Create Shopify checkout for guest
+        const storefrontPayload = await queryStorefront(
+          options,
+          STOREFRONT_CART_CREATE_MUTATION,
+          {
+            input: {
+              lines: validation.resolvedLines.map((item) => ({
+                merchandiseId: item.merchandiseId,
+                quantity: item.line.quantity,
+              })),
+              attributes: [
+                { key: 'dacus_device_id', value: deviceId },
+                { key: 'dacus_guest_checkout', value: 'true' },
+                { key: 'dacus_address_id', value: checkoutAddress.id },
+              ],
+              buyerIdentity: {
+                countryCode: checkoutAddress.countryCode,
+              },
+            },
+          },
+        ) as any;
+
+        const userErrors = storefrontPayload.cartCreate.userErrors ?? [];
+        const cart = storefrontPayload.cartCreate.cart;
+
+        console.log('[GUEST_CHECKOUT] Storefront response:', {
+          hasErrors: userErrors.length > 0,
+          errors: userErrors,
+          hasCart: !!cart,
+          hasCheckoutUrl: !!cart?.checkoutUrl,
+          checkoutUrl: cart?.checkoutUrl,
+        });
+
+        if (userErrors.length > 0) {
+          console.error('[GUEST_CHECKOUT] Shopify user errors:', userErrors);
+          reply.code(400);
+          return {
+            error: 'Shopify checkout creation failed.',
+            errorRo: 'Nu s-a putut crea checkout-ul.',
+            details: userErrors.map((e: any) => e.message).join(', '),
+          };
+        }
+
+        if (!cart?.checkoutUrl) {
+          console.error('[GUEST_CHECKOUT] No checkout URL returned from Shopify');
+          reply.code(500);
+          return {
+            error: 'No checkout URL generated.',
+            errorRo: 'Nu s-a generat URL-ul de checkout.',
+          };
+        }
+
+        checkoutUrl = cart.checkoutUrl;
+        console.log(`[GUEST_CHECKOUT] Generated checkout URL: ${checkoutUrl}`);
+
+        // Validate URL format
+        try {
+          const url = new URL(checkoutUrl);
+          if (!url.hostname.includes('myshopify.com')) {
+            console.warn('[GUEST_CHECKOUT] Checkout URL does not point to Shopify:', checkoutUrl);
+          }
+        } catch (error) {
+          console.error('[GUEST_CHECKOUT] Invalid checkout URL format:', checkoutUrl);
+          reply.code(500);
+          return {
+            error: 'Invalid checkout URL generated.',
+            errorRo: 'URL-ul de checkout generat este invalid.',
+          };
+        }
+
+        // Create order record for guest
+        const orderId = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const totalRon = computeCheckoutTotal(normalizedLines);
+
+        // Store guest order (you might want to persist this differently)
+        console.log(`[GUEST_CHECKOUT] Created order ${orderId} for device ${deviceId}`);
+
+        return {
+          orderId,
+          checkoutUrl,
+          totalRon,
+          currency,
+        };
+      } catch (error) {
+        console.error('[GUEST_CHECKOUT] Error:', error);
+        reply.code(500);
+        return { error: 'Checkout failed.' };
+      }
+    },
+  );
+
+fastify.get(
+  '/shopify-test',
+  async (request, reply) => {
+    console.log('[SHOPIFY_TEST] Testing basic connection...');
+    console.log('[SHOPIFY_TEST] Config:', {
+      domain: options.shopifyStoreDomain,
+      hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
+      tokenPrefix: options.storefrontToken?.substring(0, 6)
+    });
+
+    try {
+      // Simple test query to check if Shopify connection works
+      const testQuery = `
+        query {
+          shop {
+            name
+            primaryDomain {
+              url
+            }
+          }
+        }
+      `;
+
+      const result = await queryStorefront(options, testQuery, {});
+      console.log('[SHOPIFY_TEST] Success! Shop info:', (result as any).shop);
+      return {
+        success: true,
+        message: 'Shopify connection successful!',
+        shop: (result as any).shop,
+        config: {
+          domain: options.shopifyStoreDomain,
+          hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
+          tokenPrefix: options.storefrontToken?.substring(0, 6)
+        }
+      };
+    } catch (error) {
+      console.error('[SHOPIFY_TEST] Error details:', error);
+      return {
+        success: false,
+        message: 'Shopify connection failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        config: {
+          domain: options.shopifyStoreDomain,
+          hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
+          tokenPrefix: options.storefrontToken?.substring(0, 6)
+        }
+      };
+    }
+  },
+);
+
+fastify.post(
+  '/cart/validate-guest',
+  async (request, reply) => {
+      const body = (request.body ?? {}) as {
+        lines: CartLine[];
+      };
+
+      if (!Array.isArray(body.lines) || body.lines.length === 0) {
+        reply.code(400);
+        return { ok: false, issues: [{ code: 'empty_cart', message: 'Cart is empty.' }] };
+      }
+
+      try {
+        const validation = await resolveCartAgainstStorefront(options, body.lines, false);
+
+        return {
+          ok: validation.issues.length === 0,
+          lines: validation.resolvedLines.map((item) => item.line),
+          issues: validation.issues,
+        };
+      } catch (error) {
+        console.error('[GUEST_VALIDATE] Error:', error);
+        reply.code(500);
+        return {
+          ok: false,
+          issues: [{ code: 'validation_error', message: 'Cart validation failed.' }],
+        };
+      }
     },
   );
 };

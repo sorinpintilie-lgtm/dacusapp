@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Firestore } from 'firebase-admin/firestore';
 
-import { createCommerceStore, type CommerceStore } from '../services/commerceStore.js';
+import { createCommerceStore, createInMemoryCommerceStore, type CommerceStore } from '../services/commerceStore.js';
 import { getSessionContext } from './utils.js';
 
 type OrderRoutesOptions = {
@@ -10,7 +10,7 @@ type OrderRoutesOptions = {
 };
 
 export const orderRoutes: FastifyPluginAsync<OrderRoutesOptions> = async (fastify, options) => {
-  const store = options.store ?? createCommerceStore(options.firestore ?? null);
+  const store = options.store ?? (options.firestore ? createCommerceStore(options.firestore) : createInMemoryCommerceStore());
 
   fastify.get('/orders', async (request, reply) => {
     const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);

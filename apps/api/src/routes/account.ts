@@ -6,6 +6,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import {
   createDefaultUserSettings,
   createCommerceStore,
+  createInMemoryCommerceStore,
   type Address,
   type AnalyticsEvent,
   type CommerceStore,
@@ -146,7 +147,7 @@ const resolveSettingsWithFallback = (
 };
 
 export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (fastify, options) => {
-  const store = options.store ?? createCommerceStore(options.firestore ?? null);
+  const store = options.store ?? (options.firestore ? createCommerceStore(options.firestore) : createInMemoryCommerceStore());
 
   fastify.get('/account/addresses', async (request, reply) => {
     const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);

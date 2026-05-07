@@ -83,12 +83,10 @@ export function AdvancedSearch({
   onSelectProduct,
 }: AdvancedSearchProps) {
   const [isFocused, setIsFocused] = useState(false);
-  const [localValue, setLocalValue] = useState(value);
-  const debouncedValue = useDebouncedValue(localValue, 300);
 
   const showSuggestions =
     isFocused &&
-    (localValue.length >= 2 ||
+    (value.length >= 2 ||
       recentSearches.length > 0 ||
       savedSearches.length > 0 ||
       recentFilters.length > 0 ||
@@ -97,23 +95,10 @@ export function AdvancedSearch({
 
   const showProductResults = isFocused && productResults.length > 0;
 
-  // Sync external value changes
-  useEffect(() => {
-    if (!isFocused && value !== localValue) {
-      setLocalValue(value);
-    }
-  }, [isFocused, localValue, value]);
 
-  // Call onChangeText with debounced value
-  useEffect(() => {
-    if (debouncedValue !== value) {
-      onChangeText(debouncedValue);
-    }
-  }, [debouncedValue, onChangeText, value]);
 
   const handleClear = () => {
     const emptyValue = '';
-    setLocalValue(emptyValue);
     onChangeText(emptyValue);
     setIsFocused(false);
   };
@@ -123,19 +108,18 @@ export function AdvancedSearch({
   };
 
   const handleSubmit = () => {
-    if (localValue.trim()) {
-      onSubmit(localValue.trim());
+    if (value.trim()) {
+      onSubmit(value.trim());
     }
   };
 
   const handleSaveSearch = () => {
-    const query = localValue.trim();
+    const query = value.trim();
     if (!query || !onSaveSearch) return;
     onSaveSearch(query);
   };
 
   const handleSelectRecent = (query: string) => {
-    setLocalValue(query);
     onSelectSuggestion(query);
   };
 
@@ -251,8 +235,8 @@ export function AdvancedSearch({
         />
         <TextInput
           style={styles.input}
-          value={localValue}
-          onChangeText={setLocalValue}
+          value={value}
+          onChangeText={onChangeText}
           onFocus={() => setIsFocused(true)}
           onBlur={() => {
             // Keep dropdown visible after keyboard closes
@@ -264,13 +248,15 @@ export function AdvancedSearch({
           autoFocus={autoFocus}
           autoCorrect={false}
           autoCapitalize="none"
+          editable={true}
+          selectTextOnFocus={false}
         />
         {loading && (
           <View style={styles.loadingIndicator}>
             <ActivityIndicator size="small" color={colors.brandRed} />
           </View>
         )}
-        {localValue.length > 0 && !loading && (
+        {value.length > 0 && !loading && (
           <View style={styles.searchActions}>
             {onSaveSearch ? (
               <TouchableOpacity onPress={handleSaveSearch} style={styles.clearButton}>
@@ -286,7 +272,7 @@ export function AdvancedSearch({
 
       {showSuggestions && (
         <ScrollView style={styles.suggestionsContainer} nestedScrollEnabled>
-          {localValue.trim().length >= 2 && loading && (
+          {value.trim().length >= 2 && loading && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Se caută...</Text>
             </View>
@@ -297,14 +283,14 @@ export function AdvancedSearch({
               <Text style={styles.sectionTitle}>Produse găsite ({productResults.length})</Text>
               {productResults.slice(0, 8).map((item) => renderProductResult({ item }))}
             </View>
-          ) : localValue.trim().length >= 2 && !loading ? (
+          ) : value.trim().length >= 2 && !loading ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Nu au fost găsite produse</Text>
               <Text style={styles.bodyMuted}>Încearcă alt termen de căutare</Text>
             </View>
           ) : null}
 
-          {localValue.length === 0 && recentSearches.length > 0 && (
+          {value.length === 0 && recentSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Căutări recente</Text>
               <FlatList
@@ -316,7 +302,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {localValue.length === 0 && savedSearches.length > 0 && (
+          {value.length === 0 && savedSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Căutări salvate</Text>
               <FlatList
@@ -328,7 +314,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {localValue.length === 0 && recentFilters.length > 0 && (
+          {value.length === 0 && recentFilters.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Filtre folosite recent</Text>
               <FlatList
@@ -342,7 +328,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {localValue.length >= 2 && suggestions.length > 0 && (
+          {value.length >= 2 && suggestions.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Sugestii</Text>
               <FlatList
@@ -354,7 +340,7 @@ export function AdvancedSearch({
             </View>
           )}
 
-          {localValue.length === 0 && trendingSearches.length > 0 && (
+          {value.length === 0 && trendingSearches.length > 0 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Trending acum</Text>
               <FlatList

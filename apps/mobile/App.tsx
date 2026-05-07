@@ -95,8 +95,11 @@ import {
 import {
   getAppPreferences,
   updateAppPreferences,
+  getGuestCart,
+  updateGuestCart,
   type AppPreferences,
 } from './src/services/sessionStorage';
+import { checkoutCartGuest, validateGuestCart } from './src/services/commerce';
 import { colors, radii, spacing, typography } from './src/theme/tokens';
 import { appStyles } from './src/theme/styles';
 import {
@@ -1009,6 +1012,34 @@ function AppContent() {
       .catch(() => setAppPreferencesState(null));
   }, []);
 
+  // Load guest cart for non-authenticated users
+  useEffect(() => {
+    if (!accountUser && cart.length === 0) {
+      void getGuestCart()
+        .then((guestCart) => {
+          if (guestCart.length > 0) {
+            // Filter out cart items for products that don't exist in current catalog
+            const validCartItems = guestCart.filter((item) => {
+              const productExists = productsById.has(item.productId);
+              if (!productExists) {
+                console.warn(`Removing invalid cart item: product ${item.productId} not found in catalog`);
+              }
+              return productExists;
+            });
+            setCart(validCartItems);
+          }
+        })
+        .catch(() => undefined);
+    }
+  }, [accountUser, cart.length, productsById]);
+
+  // Save guest cart to local storage
+  useEffect(() => {
+    if (!accountUser && cart.length > 0) {
+      void updateGuestCart(cart).catch(() => undefined);
+    }
+  }, [accountUser, cart]);
+
   useEffect(() => {
     if (brandFilter !== 'toate' && !availableBrands.includes(brandFilter)) {
       setBrandFilter('toate');
@@ -1195,7 +1226,15 @@ function AppContent() {
               subscribedProducts: subscribedIds.length,
               sessions: sessions.length,
             });
-            setCart(cartLines);
+            // Filter out cart items for products that don't exist in current catalog
+            const validCartLines = cartLines.filter((item) => {
+              const productExists = productsById.has(item.productId);
+              if (!productExists) {
+                console.warn(`Removing invalid cart item: product ${item.productId} not found in catalog`);
+              }
+              return productExists;
+            });
+            setCart(validCartLines);
             setOrders(orderItems);
             setWishlist(new Set(wishlistIds));
             setInbox(inboxItems);
@@ -1371,6 +1410,11 @@ function AppContent() {
     if (!productId) return;
 
     const product = productsById.get(productId);
+    if (!product) {
+      console.warn(`Cannot add to cart: product ${productId} not found in catalog`);
+      showToast('Produsul nu este disponibil momentan.', 'error');
+      return;
+    }
     const variantId =
       selectedProduct?.id === productId
         ? selectedVariantId || selectedProduct?.variantId || product?.variantId || undefined
@@ -1702,7 +1746,8 @@ function AppContent() {
       return nameMatch || brandMatch || skuMatch || handleMatch;
     });
 
-    return matches as CatalogProduct[];
+    // Only return products that are currently loaded in the app
+    return (matches as CatalogProduct[]).filter((product) => productsById.has(product.id));
   };
 
   const handleSearchChange = (value: string) => {
@@ -1780,6 +1825,14 @@ function AppContent() {
 
   const handleSearchProductSelect = (productId: string) => {
     if (!productId) return;
+
+    // Check if product exists in current catalog
+    if (!productsById.has(productId)) {
+      console.warn(`Product ${productId} not found in current catalog`);
+      showToast('Produsul nu este disponibil momentan.', 'error');
+      return;
+    }
+
     setSearchHistory((prev) => {
       const product = productsById.get(productId);
       const label = product?.name?.trim();
@@ -2734,83 +2787,144 @@ function AppContent() {
   };
 
   const handleCheckout = () => {
-    if (!accountUser) {
-      setCatalogError('Autentifică-te înainte de checkout.');
-      goToLogin();
-      return;
-    }
-
-    if (!selectedAddressId && !checkoutAddressDraft) {
-      setCatalogError('Adaugă o adresă de livrare pentru checkout.');
-      showToast('Trebuie să adaugi o adresă de livrare.', 'error');
-      return;
-    }
-
-    if (checkoutAddressDraft) {
-      const addr = checkoutAddressDraft;
-      if (
-        !addr.fullName?.trim() ||
-        !addr.phone?.trim() ||
-        !addr.line1?.trim() ||
-        !addr.city?.trim() ||
-        !addr.county?.trim() ||
-        !addr.postalCode?.trim()
-      ) {
-        setCatalogError('Completează toate câmpurile pentru adresă.');
-        showToast('Completează toate câmpurile adresei.', 'error');
-        return;
-      }
-    }
-
+    // No address required - Shopify will handle address collection
     // Show checkout page first for order summary
     setPage('checkout');
   };
 
   const processCheckout = () => {
+    console.log('Starting checkout process, accountUser:', !!accountUser);
     setCheckoutBusy(true);
-    void validateCart()
-      .then((validation) => {
-        if (!validation.ok) {
-          const firstIssue = validation.issues[0];
-          throw new Error(
-            firstIssue?.messageRo ??
-              firstIssue?.message ??
-              'Coșul trebuie actualizat înainte de checkout.',
-          );
-        }
 
-        setCart(validation.lines);
-        return checkoutCart(
-          selectedAddressId
-            ? { addressId: selectedAddressId }
-            : { address: checkoutAddressDraft ?? undefined },
-        );
-      })
-      .then((payload) => {
-        setCatalogMeta(`Checkout inițiat: ${payload.orderId}`);
-        showToast(`Comandă plasată: ${formatPrice(payload.totalRon)}`);
-        return Promise.all([
-          fetchOrders(),
-          fetchCart(),
-          fetchOrderDetails(payload.orderId),
-          Linking.openURL(payload.checkoutUrl).catch(() => undefined),
-        ]);
-      })
-      .then(([nextOrders, nextCart, orderDetails]) => {
-        setOrders(nextOrders);
-        setCart(nextCart);
-        setOrderDetailsById((prev) => ({
-          ...prev,
-          [orderDetails.order.id]: orderDetails,
-        }));
-        setPage('account');
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : 'Checkout indisponibil momentan.';
-        setCatalogError(message);
-        showToast(message, 'error');
-      })
-      .finally(() => setCheckoutBusy(false));
+    // For guest users, we'll handle checkout differently
+    if (!accountUser) {
+      // Guest checkout - create checkout URL directly with cart data
+      // No address required - Shopify will handle it
+
+      // Validate cart locally first for guest users
+      const validCartItems = cart.filter((item) => productsById.has(item.productId));
+      if (validCartItems.length !== cart.length) {
+        console.warn('Removing invalid cart items before guest checkout');
+        setCart(validCartItems);
+      }
+
+      if (validCartItems.length === 0) {
+        console.log('Cart became empty after filtering invalid items');
+        setCatalogError('Coșul este gol.');
+        showToast('Adaugă produse în coș înainte de checkout.', 'error');
+        setCheckoutBusy(false);
+        return;
+      }
+
+      // Validate cart for guest users
+      void validateGuestCart(validCartItems)
+        .then((validation) => {
+          console.log('Cart validation result:', validation);
+          if (!validation.ok) {
+            const firstIssue = validation.issues[0];
+            throw new Error(
+              firstIssue?.messageRo ??
+                firstIssue?.message ??
+                'Coșul trebuie actualizat înainte de checkout.',
+            );
+          }
+
+          setCart(validation.lines);
+
+          // Create guest checkout - no address needed
+          return checkoutCartGuest({
+            lines: validation.lines,
+            address: undefined, // Shopify will handle address
+            deviceId,
+          });
+        })
+        .then((payload) => {
+          setCatalogMeta(`Checkout guest inițiat: ${payload.orderId}`);
+          showToast(`Comandă plasată: ${formatPrice(payload.totalRon)}`);
+          console.log('Checkout URL:', payload.checkoutUrl);
+
+          // Clear cart after successful checkout
+          setCart([]);
+          // Clear guest cart from local storage
+          void updateGuestCart([]).catch(() => undefined);
+
+          // Redirect to Shopify checkout
+          return Linking.openURL(payload.checkoutUrl).catch((error) => {
+            console.error('Failed to open checkout URL:', error);
+            showToast('Eroare la deschiderea paginii de plată', 'error');
+          });
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Checkout indisponibil momentan.';
+          setCatalogError(message);
+          showToast(message, 'error');
+        })
+        .finally(() => setCheckoutBusy(false));
+    } else {
+      // Validate cart locally first for authenticated users
+      const validCartItems = cart.filter((item) => productsById.has(item.productId));
+      if (validCartItems.length !== cart.length) {
+        console.warn('Removing invalid cart items before authenticated checkout');
+        setCart(validCartItems);
+      }
+
+      if (validCartItems.length === 0) {
+        setCatalogError('Coșul este gol.');
+        showToast('Adaugă produse în coș înainte de checkout.', 'error');
+        setCheckoutBusy(false);
+        return;
+      }
+
+      // Authenticated user checkout
+      void validateCart()
+        .then((validation) => {
+          if (!validation.ok) {
+            const firstIssue = validation.issues[0];
+            throw new Error(
+              firstIssue?.messageRo ??
+                firstIssue?.message ??
+                'Coșul trebuie actualizat înainte de checkout.',
+            );
+          }
+
+          setCart(validation.lines);
+          return checkoutCart(
+            selectedAddressId
+              ? { addressId: selectedAddressId }
+              : { address: checkoutAddressDraft ?? undefined },
+          );
+        })
+        .then((payload) => {
+          setCatalogMeta(`Checkout inițiat: ${payload.orderId}`);
+          showToast(`Comandă plasată: ${formatPrice(payload.totalRon)}`);
+          console.log('Checkout URL:', payload.checkoutUrl);
+
+          return Promise.all([
+            fetchOrders(),
+            fetchCart(),
+            fetchOrderDetails(payload.orderId),
+            Linking.openURL(payload.checkoutUrl).catch((error) => {
+              console.error('Failed to open checkout URL:', error);
+              showToast('Eroare la deschiderea paginii de plată', 'error');
+            }),
+          ]);
+        })
+        .then(([nextOrders, nextCart, orderDetails]) => {
+          setOrders(nextOrders);
+          setCart(nextCart);
+          setOrderDetailsById((prev) => ({
+            ...prev,
+            [orderDetails.order.id]: orderDetails,
+          }));
+          setPage('account');
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : 'Checkout indisponibil momentan.';
+          setCatalogError(message);
+          showToast(message, 'error');
+        })
+        .finally(() => setCheckoutBusy(false));
+    }
   };
 
   const addBundleToCart = (productIds: string[]) => {
@@ -2905,7 +3019,7 @@ function AppContent() {
   };
 
   const submitAddressEditor = () => {
-    if (!accountUser || addressBusy) return;
+    if (addressBusy) return;
 
     const normalizedLine2 = addressDraft.line2?.trim() ?? '';
     const nextDraft: AddressDraft = {
@@ -2941,6 +3055,16 @@ function AppContent() {
       return;
     }
 
+    if (!accountUser) {
+      // Guest user - just save to checkout address draft
+      setCheckoutAddressDraft(nextDraft);
+      setAddressEditorVisible(false);
+      setAddressEditorId(null);
+      showToast('Adresă de livrare setată.');
+      return;
+    }
+
+    // Authenticated user - save to server
     const editingAddressId = addressEditorId;
     setAddressBusy(true);
     setAddressFormError(null);
@@ -3160,7 +3284,15 @@ function AppContent() {
           sessions,
           settingsPayload,
         ]) => {
-          setCart(cartLines);
+          // Filter out cart items for products that don't exist in current catalog
+          const validCartLines = cartLines.filter((item) => {
+            const productExists = productsById.has(item.productId);
+            if (!productExists) {
+              console.warn(`Removing invalid cart item: product ${item.productId} not found in catalog`);
+            }
+            return productExists;
+          });
+          setCart(validCartLines);
           setOrders(orderItems);
           setWishlist(new Set(wishlistIds));
           setInbox(inboxItems);
@@ -3280,7 +3412,15 @@ function AppContent() {
           sessions,
           settingsPayload,
         ]) => {
-          setCart(cartLines);
+          // Filter out cart items for products that don't exist in current catalog
+          const validCartLines = cartLines.filter((item) => {
+            const productExists = productsById.has(item.productId);
+            if (!productExists) {
+              console.warn(`Removing invalid cart item: product ${item.productId} not found in catalog`);
+            }
+            return productExists;
+          });
+          setCart(validCartLines);
           setOrders(orderItems);
           setWishlist(new Set(wishlistIds));
           setInbox(inboxItems);
@@ -3592,7 +3732,6 @@ function AppContent() {
         <View style={styles.stackLarge}>
           <CartScreen
             styles={styles}
-            isLoading={isLoading}
             cartItems={cartItems}
             cartTotal={cartTotal}
             cartError={
@@ -3601,9 +3740,6 @@ function AppContent() {
                 ? null
                 : catalogError
             }
-            selectedAddress={selectedAddress}
-            addressesCount={addresses.length}
-            addressBusy={addressBusy}
             checkoutBusy={checkoutBusy}
             deliveryEtaLabel={deliveryEtaLabel}
             priceChangeExplanation={priceChangeExplanation}
@@ -3611,29 +3747,6 @@ function AppContent() {
             onRemoveLine={removeCartItem}
             onCheckout={handleCheckout}
             onOpenProducts={() => setPage('products')}
-            onSelectOrAddAddress={() => {
-              setAccountSegment('addresses');
-              setPage('account');
-              if (addresses.length === 0) {
-                openCreateAddressEditor();
-              }
-            }}
-            checkoutAddressDraft={checkoutAddressDraft}
-            onUpdateCheckoutAddressField={(field, value) => {
-              const current = checkoutAddressDraft ?? {
-                label: 'Livrare',
-                fullName: '',
-                phone: '',
-                line1: '',
-                line2: '',
-                city: '',
-                county: '',
-                postalCode: '',
-                countryCode: 'RO',
-              };
-              setCheckoutAddressDraft({ ...current, [field]: value });
-            }}
-            hasImageUrl={hasImageUrl}
           />
 
           <View style={styles.cardPlain}>
@@ -3757,7 +3870,8 @@ function AppContent() {
   };
 
   return (
-    <SafeAreaView style={appStyles.safeArea}>
+    <>
+      <SafeAreaView style={appStyles.safeArea}>
       <StatusBar barStyle="dark-content" />
 
       <View style={[styles.headerWrap, isStandaloneAuthPage(page) && styles.headerWrapCompact]}>
@@ -4182,10 +4296,12 @@ function AppContent() {
         </TouchableOpacity>
       </Modal>
 
+    </SafeAreaView>
+
       {isStandaloneAuthPage(page) ? null : (
         <NavigationBar currentPage={page} onNavigate={smoothNavigate} cartCount={cartCount} />
       )}
-    </SafeAreaView>
+    </>
   );
 }
 

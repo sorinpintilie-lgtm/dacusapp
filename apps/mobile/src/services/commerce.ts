@@ -533,6 +533,14 @@ export const validateCart = async (): Promise<CartValidationResult> => {
   });
 };
 
+export const validateGuestCart = async (lines: CartLine[]): Promise<CartValidationResult> => {
+  return apiRequest('/cart/validate-guest', {
+    method: 'POST',
+    auth: false,
+    body: { lines },
+  });
+};
+
 export const checkoutCart = async (input?: {
   addressId?: string;
   address?: AddressDraft;
@@ -551,6 +559,30 @@ export const checkoutCart = async (input?: {
       currency: 'RON',
       ...(input?.addressId ? { addressId: input.addressId } : {}),
       ...(input?.address ? { address: input.address } : {}),
+    },
+  });
+};
+
+export const checkoutCartGuest = async (input: {
+  lines: CartLine[];
+  address?: AddressDraft;
+  deviceId: string;
+}): Promise<{
+  orderId: string;
+  checkoutUrl: string;
+  trackingCode?: string;
+  totalRon: number;
+  currency: string;
+}> => {
+  console.log('Calling checkoutCartGuest with:', input);
+  return apiRequest('/cart/checkout-guest', {
+    method: 'POST',
+    auth: false,
+    body: {
+      currency: 'RON',
+      lines: input.lines,
+      ...(input.address ? { address: input.address } : {}),
+      deviceId: input.deviceId,
     },
   });
 };

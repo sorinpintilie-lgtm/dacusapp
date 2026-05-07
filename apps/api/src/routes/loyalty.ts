@@ -5,6 +5,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 
 import {
   createCommerceStore,
+  createInMemoryCommerceStore,
   type CommerceStore,
   type LoyaltyProfile,
   type Order,
@@ -123,7 +124,7 @@ const addNotificationWithPush = async (
 };
 
 export const loyaltyRoutes: FastifyPluginAsync<LoyaltyRoutesOptions> = async (fastify, options) => {
-  const store = options.store ?? createCommerceStore(options.firestore ?? null);
+  const store = options.store ?? (options.firestore ? createCommerceStore(options.firestore) : createInMemoryCommerceStore());
 
   fastify.get('/loyalty/summary', async (request, reply) => {
     const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);

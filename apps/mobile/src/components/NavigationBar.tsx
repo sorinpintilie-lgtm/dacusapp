@@ -80,6 +80,10 @@ const BADGE_SIZE = 18;
 
 const styles = StyleSheet.create({
   bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: 70,
     backgroundColor: 'rgba(255,255,255,0.98)',
     borderTopWidth: 1,
