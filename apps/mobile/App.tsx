@@ -13,6 +13,7 @@ import {
   Linking,
   Modal,
   PanResponder,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -34,6 +35,7 @@ import { ProductCard } from './src/components/ProductCard';
 import { RegisterScreen } from './src/components/RegisterScreen';
 import { Skeleton } from './src/components/Skeleton';
 import { NavigationBar } from './src/components/NavigationBar';
+import { StickyBottomBar } from './src/components/UXComponents';
 import { Ionicons } from '@expo/vector-icons';
 import { useCatalog } from './src/hooks/useCatalog';
 import { AccountScreen } from './src/screens/AccountScreen';
@@ -833,6 +835,14 @@ function AppContent() {
     [homeCategories, homeProducts],
   );
 
+  const orderedFeaturedCategories = useMemo(
+    () => [
+      ...featuredCategories.filter((item) => favoriteCategoryIds.includes(item.id)),
+      ...featuredCategories.filter((item) => !favoriteCategoryIds.includes(item.id)),
+    ],
+    [featuredCategories, favoriteCategoryIds],
+  );
+
   const trendingSearches = useMemo(
     () =>
       Array.from(
@@ -891,28 +901,34 @@ function AppContent() {
 
   const orderedCategoriesForView = useMemo(() => {
     const favorites = new Set(favoriteCategoryIds);
-    const ranked = categories.map((category) => ({
-      category,
-      favorite: favorites.has(category.id),
-      productsCount: countByCategory.get(category.id) ?? 0,
-      discountCount: products.filter(
-        (item) => item.categoryId === category.id && (item.oldPriceRon ?? 0) > item.priceRon,
-      ).length,
-      inStockRate:
-        products.filter((item) => item.categoryId === category.id).length > 0
-          ? Math.round(
-              (products.filter(
-                (item) =>
-                  item.categoryId === category.id &&
-                  (typeof item.stockLabel === 'string' ? item.stockLabel : '')
-                    .toLowerCase()
-                    .includes('stoc'),
-              ).length /
-                Math.max(1, products.filter((item) => item.categoryId === category.id).length)) *
-                100,
-            )
-          : 0,
-    }));
+    // Single O(n) pass over products to build per-category discount and in-stock counts
+    const discountCountMap = new Map<string, number>();
+    const inStockCountMap = new Map<string, number>();
+    for (const item of products) {
+      const cid = item.categoryId;
+      if (!cid) continue;
+      if ((item.oldPriceRon ?? 0) > item.priceRon) {
+        discountCountMap.set(cid, (discountCountMap.get(cid) ?? 0) + 1);
+      }
+      if (
+        typeof item.stockLabel === 'string' &&
+        item.stockLabel.toLowerCase().includes('stoc')
+      ) {
+        inStockCountMap.set(cid, (inStockCountMap.get(cid) ?? 0) + 1);
+      }
+    }
+
+    const ranked = categories.map((category) => {
+      const totalCount = countByCategory.get(category.id) ?? 0;
+      const inStockCount = inStockCountMap.get(category.id) ?? 0;
+      return {
+        category,
+        favorite: favorites.has(category.id),
+        productsCount: totalCount,
+        discountCount: discountCountMap.get(category.id) ?? 0,
+        inStockRate: totalCount > 0 ? Math.round((inStockCount / Math.max(1, totalCount)) * 100) : 0,
+      };
+    });
 
     return ranked.sort((a, b) => {
       if (a.favorite !== b.favorite) return Number(b.favorite) - Number(a.favorite);
@@ -999,12 +1015,15 @@ function AppContent() {
     Number(sortOption !== 'relevanta') +
     Number(facetCategoryId.length > 0);
 
-  const sortLabelMap: Record<SortOption, string> = {
-    relevanta: 'Relevanță',
-    pretCrescator: 'Preț crescător',
-    pretDescrescator: 'Preț descrescător',
-    numeAZ: 'Nume A-Z',
-  };
+  const sortLabelMap = useMemo(
+    (): Record<SortOption, string> => ({
+      relevanta: 'Relevanță',
+      pretCrescator: 'Preț crescător',
+      pretDescrescator: 'Preț descrescător',
+      numeAZ: 'Nume A-Z',
+    }),
+    [],
+  );
 
   useEffect(() => {
     void getAppPreferences()
@@ -1390,10 +1409,10 @@ function AppContent() {
     setShouldPromptBiometricAfterAuth(false);
   }, [accountSettings.biometricPromptShown, appPreferences, shouldPromptBiometricAfterAuth]);
 
-  const showToast = (message: string, tone: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
     setToastTone(tone);
     setToastMessage(message);
-  };
+  }, []);
 
   const currentTierTarget = useMemo(() => {
     if (loyalty.tier === 'Gold') return 5000;
@@ -1653,7 +1672,8 @@ function AppContent() {
     setZoomLevel(1);
   };
 
-  const swipeBackResponder = PanResponder.create({
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const swipeBackResponder = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, gestureState) =>
       gestureState.x0 < 28 && gestureState.dx > 18 && Math.abs(gestureState.dy) < 18,
     onPanResponderRelease: (_, gestureState) => {
@@ -1661,7 +1681,7 @@ function AppContent() {
         goBackBySwipe();
       }
     },
-  });
+  }), [goBackBySwipe]);
 
   const resetFilters = () => {
     setBrandFilter('toate');
@@ -2414,7 +2434,7 @@ function AppContent() {
               <View style={styles.accountAvatar}>
                 <Text style={styles.accountAvatarText}>{initials || 'DC'}</Text>
               </View>
-              <TouchableOpacity style={styles.editProfileButton}>
+              <TouchableOpacity style={styles.editProfileButton} onPress={() => setPage('settings')}>
                 <MaterialCommunityIcons name="pencil" size={16} color={colors.brandBlue} />
               </TouchableOpacity>
             </View>
@@ -2650,7 +2670,7 @@ function AppContent() {
                       {timeline.map((step, index) => (
                         <View key={`${order.id}-${step}`} style={styles.orderTimelineStep}>
                           <Text style={styles.orderTimelineDot}>
-                            {index === timeline.length - 1 ? 'â-' : 'â-‹'}
+                            {index === timeline.length - 1 ? '✓' : '→'}
                           </Text>
                           <Text style={styles.orderTimelineText}>{step}</Text>
                         </View>
@@ -2674,7 +2694,7 @@ function AppContent() {
                 return (
                   <View key={address.id} style={styles.accountListRow}>
                     <Text style={styles.bodyText}>
-                      {active ? 'â ̃... ' : 'â-‹ '}
+                      {active ? '✓ ' : '· '}
                       {address.label}
                     </Text>
                     <Text style={styles.accountListMeta}>
@@ -3318,7 +3338,7 @@ function AppContent() {
           setAuthRedirectPage(null);
           setShouldPromptBiometricAfterAuth(true);
           showToast('Autentificare reușită. Bine ai revenit!');
-          void registerDeviceForNotifications(`ios-${Date.now()}`, 'ios').catch(() => undefined);
+          void registerDeviceForNotifications(`${Platform.OS}-${Date.now()}`, Platform.OS).catch(() => undefined);
         },
       )
       .catch((error) => {
@@ -3447,7 +3467,7 @@ function AppContent() {
           setAuthRedirectPage(null);
           setShouldPromptBiometricAfterAuth(true);
           showToast('Cont creat cu succes. Bine ai venit!');
-          void registerDeviceForNotifications(`ios-${Date.now()}`, 'ios').catch(() => undefined);
+          void registerDeviceForNotifications(`${Platform.OS}-${Date.now()}`, Platform.OS).catch(() => undefined);
         },
       )
       .catch((error) => {
@@ -3849,10 +3869,7 @@ function AppContent() {
         styles={styles}
         isLoading={isLoading}
         catalogError={catalogError}
-        featuredCategories={[
-          ...featuredCategories.filter((item) => favoriteCategoryIds.includes(item.id)),
-          ...featuredCategories.filter((item) => !favoriteCategoryIds.includes(item.id)),
-        ]}
+        featuredCategories={orderedFeaturedCategories}
         homeCategories={homeCategories}
         homeProducts={homeProducts}
         continueBrowsingProducts={continueBrowsingProducts}
@@ -3977,6 +3994,17 @@ function AppContent() {
           </Animated.View>
         </ScrollView>
       )}
+
+      {page === 'productDetails' && selectedProduct ? (
+        <StickyBottomBar
+          visible
+          price={selectedProduct.priceRon != null ? formatPrice(selectedProduct.priceRon) : undefined}
+          buttonLabel="Adaugă în coș"
+          onButtonPress={() => addToCart(selectedProduct.id)}
+          secondaryButtonLabel="Favorite"
+          onSecondaryPress={() => toggleWishlist(selectedProduct.id)}
+        />
+      ) : null}
 
       {cartCount > 0 && page !== 'cart' && !isStandaloneAuthPage(page) ? (
         <TouchableOpacity

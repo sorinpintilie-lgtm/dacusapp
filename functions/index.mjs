@@ -103,7 +103,7 @@ const getServer = async () => {
   if (!appPromise) {
     appPromise = (async () => {
       ensureRuntimeEnvDefaults();
-      const app = buildServer(loadEnv());
+      const app = await buildServer(loadEnv());
       await app.ready();
       return app;
     })();

@@ -7,7 +7,8 @@ import type { CommerceStore } from '../services/commerceStore.js';
 let firebaseAuthInstance: Auth | null = null;
 
 export const initFirebaseAuth = (projectId: string, clientEmail: string, privateKey: string) => {
-  if (!admin.apps.length) {
+  const hasDefaultApp = admin.apps.some((app) => app?.name === '[DEFAULT]');
+  if (!hasDefaultApp) {
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId,

@@ -65,13 +65,13 @@ async function getAccessToken(): Promise<string> {
 }
 
 export async function sendPushNotification(
-  store: { getDevices: (userId: string) => Promise<DeviceRegistration[]> },
+  store: { getDeviceRegistrations: (userId: string) => Promise<DeviceRegistration[]> },
   userId: string,
   title: string,
   body: string,
   data?: Record<string, string>,
 ): Promise<number> {
-  const devices = await store.getDevices(userId);
+  const devices = await store.getDeviceRegistrations(userId);
   const pushTokens = devices
     .map((d) => d.pushToken)
     .filter((token): token is string => token.length > 0);

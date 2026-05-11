@@ -4,7 +4,7 @@ const schema = z.object({
   EXPO_PUBLIC_API_BASE_URL: z
     .string()
     .url()
-    .default('https://us-central1-dacus-b40f9.cloudfunctions.net/api'),
+    .default('https://europe-west1-dacus-b40f9.cloudfunctions.net/api'),
   EXPO_PUBLIC_API_BASE_URL_DEVICE: z.string().url().optional(),
   EXPO_PUBLIC_STORE_DOMAIN: z.string().optional(),
   EXPO_PUBLIC_PUBLIC_TOKEN: z.string().optional(),
@@ -45,7 +45,7 @@ if (!parsed.success) {
 const data = parsed.success
   ? parsed.data
   : {
-      EXPO_PUBLIC_API_BASE_URL: 'https://us-central1-dacus-b40f9.cloudfunctions.net/api',
+      EXPO_PUBLIC_API_BASE_URL: 'https://europe-west1-dacus-b40f9.cloudfunctions.net/api',
       EXPO_PUBLIC_API_BASE_URL_DEVICE: undefined,
       EXPO_PUBLIC_STORE_DOMAIN: undefined,
       EXPO_PUBLIC_PUBLIC_TOKEN: undefined,

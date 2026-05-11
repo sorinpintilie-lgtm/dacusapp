@@ -11,8 +11,9 @@ import { cartRoutes } from './routes/cart.js';
 import { orderRoutes } from './routes/orders.js';
 import { loyaltyRoutes } from './routes/loyalty.js';
 import { accountRoutes } from './routes/account.js';
+import { orderTrackingRoutes } from './routes/orderTracking.js';
 import { createCatalogStore } from './services/catalogStore.js';
-import { createInMemoryCommerceStore } from './services/commerceStore.js';
+import { createCommerceStore, createInMemoryCommerceStore } from './services/commerceStore.js';
 import { createFirestoreClient } from './services/firebase.js';
 import { createSearchIndex, type SearchIndex } from './services/searchIndex.js';
 
@@ -233,6 +234,9 @@ export const buildServer = async (env: BuildServerEnv) => {
   });
   app.register(accountRoutes, {
     ...(testCommerceStore ? { store: testCommerceStore } : { firestore }),
+  });
+  app.register(orderTrackingRoutes, {
+    store: testCommerceStore ?? createCommerceStore(firestore),
   });
   app.register(catalogRoutes, {
     catalogEnv: {

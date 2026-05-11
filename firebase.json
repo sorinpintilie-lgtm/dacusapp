@@ -5,7 +5,7 @@
     "predeploy": [
       "npm --prefix functions install",
       "npm --prefix apps/api run build",
-      "node -e \"const fs=require('fs');fs.rmSync('functions/api-dist',{recursive:true,force:true});fs.cpSync('apps/api/dist','functions/api-dist',{recursive:true});\""
+      "node functions/copy-dist.mjs"
     ]
   },
   "emulators": {

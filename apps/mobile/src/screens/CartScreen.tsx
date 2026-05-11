@@ -97,12 +97,37 @@ export const CartScreen = ({
           </View>
           <Text style={styles.bodyMuted}>{deliveryEtaLabel}</Text>
           <Text style={styles.bodyMuted}>
-            Adresa de livrare și informațiile de plată vor fi colectate de către Shopify.
+            Adresa și datele de plată sunt colectate securizat de Shopify.
           </Text>
-
           {priceChangeExplanation ? (
             <Text style={styles.bodyMuted}>{priceChangeExplanation}</Text>
           ) : null}
+          {/* Trust signals */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.xs }}>
+            {[
+              { icon: 'shield-checkmark-outline' as const, label: 'Plată securizată' },
+              { icon: 'refresh-outline' as const, label: 'Retur 14 zile' },
+              { icon: 'headset-outline' as const, label: 'Suport Dacus' },
+            ].map((item) => (
+              <View
+                key={item.label}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: colors.surfaceAlt,
+                  borderRadius: 99,
+                  paddingHorizontal: spacing.xs,
+                  paddingVertical: 4,
+                }}
+              >
+                <Ionicons name={item.icon} size={12} color={colors.success} />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textSecondary }}>
+                  {item.label}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </AnimatedEntrance>
 

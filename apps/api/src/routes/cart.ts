@@ -55,8 +55,8 @@ type ResolvedStorefrontVariant = {
   currencyCode: string;
 };
 
-const STOREFRONT_PRODUCT_VARIANTS_QUERY = `query DacusResolveCartProductVariants($id: ID!) { product(id: $id) { id title variants(first: 50) { nodes { id title availableForSale sku price { amount currencyCode } } } } } }`;
-const STOREFRONT_CART_CREATE_MUTATION = `mutation DacusCreateCheckoutCart($input: CartInput!) { cartCreate(input: $input) { cart { id checkoutUrl } userErrors { field message } } } }`;
+const STOREFRONT_PRODUCT_VARIANTS_QUERY = `query DacusResolveCartProductVariants($id: ID!) { product(id: $id) { id title variants(first: 50) { nodes { id title availableForSale sku price { amount currencyCode } } } } }`;
+const STOREFRONT_CART_CREATE_MUTATION = `mutation DacusCreateCheckoutCart($input: CartInput!) { cartCreate(input: $input) { cart { id checkoutUrl } userErrors { field message } } }`;
 
 type CartValidationIssue = {
   lineKey: string;

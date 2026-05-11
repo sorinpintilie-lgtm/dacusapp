@@ -211,24 +211,35 @@ export const HomeScreen = ({
       ) : null}
 
       <AnimatedEntrance delay={82}>
-        <View
+        <TouchableOpacity
+          activeOpacity={0.88}
           style={{
-            backgroundColor: colors.surface,
+            backgroundColor: '#1E1E22',
             borderRadius: 18,
-            borderWidth: 1,
-            borderColor: colors.border,
             padding: spacing.md,
             gap: spacing.xs,
           }}
+          onPress={onOpenLoyalty}
         >
-          <View style={styles.sectionHeadLeft}>
-            <Ionicons name="shield-checkmark-outline" size={18} color={colors.brandRed} />
-            <Text style={styles.sectionLabel}>Experiență mai clară în aplicație</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={styles.sectionHeadLeft}>
+              <Ionicons name="wallet-outline" size={18} color={colors.brandAmber} />
+              <Text style={[styles.sectionLabel, { color: '#FFFFFF' }]}>Program fidelitate Dacus</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.brandAmber} />
           </View>
-          <Text style={styles.bodyMuted}>
-            Produse, categorii și fidelitate organizate mai aerisit, fără blocuri vizuale agresive.
+          <Text style={{ color: 'rgba(255,255,255,0.70)', fontSize: 13, lineHeight: 19 }}>
+            Câștigă puncte la fiecare achiziție și transformă-le în vouchere de reducere.
           </Text>
-        </View>
+          <View style={{ flexDirection: 'row', gap: spacing.xs, marginTop: 2 }}>
+            <View style={{ backgroundColor: 'rgba(255,184,0,0.16)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
+              <Text style={{ color: colors.brandAmber, fontSize: 11, fontWeight: '800' }}>100 pct = 5 RON</Text>
+            </View>
+            <View style={{ backgroundColor: 'rgba(255,184,0,0.16)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
+              <Text style={{ color: colors.brandAmber, fontSize: 11, fontWeight: '800' }}>Bronze · Silver · Gold</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       </AnimatedEntrance>
 
       <AnimatedEntrance delay={108}>
@@ -443,23 +454,11 @@ export const HomeScreen = ({
                 color={colors.brandRed}
                 style={{ marginRight: spacing.xs }}
               />
-              <Text style={styles.secondaryButtonText}>Deschide zona fidelitate</Text>
+              <Text style={styles.secondaryButtonText}>Program fidelitate</Text>
             </TouchableOpacity>
           </View>
         </View>
       </AnimatedEntrance>
-
-      {sectionsByCategory.length > 0 && hasMoreCategories ? (
-        <TouchableOpacity style={styles.secondaryButton} onPress={onOpenCategories}>
-          <Ionicons
-            name="grid-outline"
-            size={16}
-            color={colors.brandRed}
-            style={{ marginRight: spacing.xs }}
-          />
-          <Text style={styles.secondaryButtonText}>Vezi toate categoriile</Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 };

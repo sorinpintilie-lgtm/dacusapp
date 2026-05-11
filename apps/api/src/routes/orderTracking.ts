@@ -7,14 +7,14 @@ import {
   type CarrierService,
 } from '../services/carriers.js';
 import { sendPushNotification } from '../services/push.js';
-import { type CartLine } from '../services/commerceStore.js';
+import { type CartLine, type Order, type DeviceRegistration } from '../services/commerceStore.js';
 import { randomBytes } from 'node:crypto';
 
 interface OrderTrackingOptions {
   store: {
     getOrders: (userId: string) => Promise<Order[]>;
     setOrders: (userId: string, orders: Order[]) => Promise<void>;
-    getDevices: (userId: string) => Promise<DeviceRegistration[]>;
+    getDeviceRegistrations: (userId: string) => Promise<DeviceRegistration[]>;
   };
 }
 
@@ -279,31 +279,4 @@ export const orderTrackingRoutes: FastifyPluginAsync<OrderTrackingOptions> = asy
   });
 };
 
-interface Order {
-  id: string;
-  userId: string;
-  lines: CartLine[];
-  totalRon: number;
-  currency: string;
-  status: string;
-  trackingCode?: string;
-  carrier?: string;
-  carrierService?: string;
-  trackingUrl?: string;
-  estimatedDelivery?: string;
-  checkoutUrl?: string;
-  externalCheckoutId?: string;
-  addressId?: string;
-  createdAt: string;
-  shippedAt?: string;
-  deliveredAt?: string;
-}
 
-interface DeviceRegistration {
-  id: string;
-  deviceId: string;
-  platform: string;
-  pushToken: string;
-  createdAt: string;
-  lastSeenAt: string;
-}
