@@ -1,564 +1,326 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 
-import { Ionicons } from '@expo/vector-icons';
-import { Skeleton } from '../components/Skeleton';
-import type { AccountSettings, AccountSettingsPatch } from '../services/commerce';
-import { fixRomanianMojibake } from '../utils/string';
-import type { ScreenStyles } from './screenTypes';
-import { colors, spacing } from '../theme/tokens';
+import type { AccountSettingsPatch } from '../services/commerce';
+import { useApp } from '../state/AppProvider';
+import { colors, continuous, fonts, radii, spacing } from '../theme/tokens';
+import { AppText, Button, ListItem, ListSection, useToast } from '../ui';
 
-type SettingsScreenProps = {
-  styles: ScreenStyles;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  accountEmail: string;
-  settings: AccountSettings;
-  biometricEnabled: boolean;
-  onUpdateSettings: (patch: AccountSettingsPatch) => Promise<void>;
-  onToggleBiometricLogin: () => void;
-  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-  onOpenSessions: () => void;
-  onLogout: () => void;
-  onGoLogin: () => void;
+const SOURCE = 'mobile_app';
+
+type SwitchRowProps = {
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
 };
 
-const source = 'mobile_app';
+function SwitchRow({ title, subtitle, value, disabled, onChange }: SwitchRowProps) {
+  return (
+    <ListItem
+      title={title}
+      subtitle={subtitle}
+      disabled={disabled}
+      right={
+        <Switch
+          value={value}
+          disabled={disabled}
+          onValueChange={onChange}
+          trackColor={{ true: colors.brand, false: colors.lineStrong }}
+          thumbColor={Platform.OS === 'android' ? colors.surface : undefined}
+        />
+      }
+    />
+  );
+}
 
-export const SettingsScreen = ({
-  styles,
-  isLoading,
-  isAuthenticated,
-  accountEmail,
-  settings,
-  biometricEnabled,
-  onUpdateSettings,
-  onToggleBiometricLogin,
-  onChangePassword,
-  onOpenSessions,
-  onLogout,
-  onGoLogin,
-}: SettingsScreenProps) => {
+export function SettingsScreen() {
+  const navigation = useNavigation();
+  const { show: showToast } = useToast();
+  const {
+    accountUser,
+    effectiveAccountSettings: settings,
+    settingsLoading,
+    refreshServerAccountSettings,
+    updateSettings,
+    changePassword,
+    biometricLoginEnabled,
+    toggleBiometricLogin,
+    logout,
+  } = useApp();
+  const signedIn = !!accountUser;
+
   const [displayName, setDisplayName] = useState(settings.profile.displayName);
   const [locale, setLocale] = useState(settings.profile.locale);
-  const [busySection, setBusySection] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [statusTone, setStatusTone] = useState<'success' | 'error'>('success');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [busySection, setBusySection] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (signedIn) void refreshServerAccountSettings();
+  }, [refreshServerAccountSettings, signedIn]);
 
   useEffect(() => {
     setDisplayName(settings.profile.displayName);
     setLocale(settings.profile.locale);
   }, [settings.profile.displayName, settings.profile.locale]);
 
-  const setFeedback = (message: string, tone: 'success' | 'error') => {
-    setStatusTone(tone);
-    setStatusMessage(message);
-  };
-
-  const runSave = async (section: string, patch: AccountSettingsPatch, successMessage: string) => {
+  const save = async (section: string, patch: AccountSettingsPatch, successMessage: string) => {
     setBusySection(section);
     try {
-      await onUpdateSettings(patch);
-      setFeedback(successMessage, 'success');
+      await updateSettings(patch);
+      showToast(successMessage);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nu am putut salva setarile.';
-      setFeedback(message, 'error');
+      showToast(error instanceof Error ? error.message : 'Nu am putut salva setările.', 'error');
     } finally {
       setBusySection(null);
     }
   };
 
-  const saveProfile = async () => {
-    const nextDisplayName = displayName.trim();
+  const saveProfile = () => {
+    const nextName = displayName.trim();
     const nextLocale = locale.trim();
-    if (nextDisplayName.length < 2) {
-      setFeedback('Numele afisat trebuie sa aiba minimum 2 caractere.', 'error');
+    if (nextName.length < 2) {
+      showToast('Numele trebuie să aibă cel puțin 2 caractere.', 'error');
       return;
     }
     if (nextLocale.length < 2) {
-      setFeedback('Locale invalid. Exemplu: ro-RO sau en-US.', 'error');
+      showToast('Limba nu este validă. Exemplu: ro-RO.', 'error');
       return;
     }
-
-    await runSave(
-      'profile',
-      { profile: { displayName: nextDisplayName, locale: nextLocale } },
-      'Profilul a fost actualizat.',
-    );
-  };
-
-  const runToggle = async (
-    section: string,
-    patch: AccountSettingsPatch,
-    successMessage: string,
-  ) => {
-    await runSave(section, patch, successMessage);
+    void save('profile', { profile: { displayName: nextName, locale: nextLocale } }, 'Profilul a fost actualizat.');
   };
 
   const submitPasswordChange = async () => {
     const current = currentPassword.trim();
     const next = newPassword.trim();
-    if (!isAuthenticated) {
-      setFeedback('Autentifica-te pentru schimbarea parolei.', 'error');
-      return;
-    }
     if (!current || !next) {
-      setFeedback('Completeaza parola curenta si parola noua.', 'error');
+      showToast('Completează parola curentă și parola nouă.', 'error');
       return;
     }
     if (next.length < 8) {
-      setFeedback('Parola noua trebuie sa aiba minimum 8 caractere.', 'error');
+      showToast('Parola nouă trebuie să aibă minimum 8 caractere.', 'error');
       return;
     }
-
     setBusySection('password');
     try {
-      await onChangePassword(current, next);
+      await changePassword(current, next);
       setCurrentPassword('');
       setNewPassword('');
-      setFeedback('Parola a fost actualizata.', 'success');
+      showToast('Parola a fost schimbată.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nu am putut schimba parola.';
-      setFeedback(message, 'error');
+      showToast(error instanceof Error ? error.message : 'Nu am putut schimba parola.', 'error');
     } finally {
       setBusySection(null);
     }
   };
 
   const marketingGranted = settings.privacy.marketingConsent.granted;
-  const statusStyle = useMemo(
-    () => [styles.bodyMuted, statusTone === 'error' ? styles.errorText : null],
-    [statusTone, styles.bodyMuted, styles.errorText],
-  );
-  const normalizedStatusMessage = statusMessage ? fixRomanianMojibake(statusMessage) : null;
-
-  if (isLoading) {
-    return (
-      <View style={styles.stackLarge}>
-        <Skeleton height={120} />
-        <Skeleton height={170} />
-        <Skeleton height={120} />
-      </View>
-    );
-  }
 
   return (
-    <View style={styles.stackLarge}>
-      <View style={styles.cardPlain}>
-        <Text style={styles.pageHeading}>Setari cont</Text>
-        <Text style={styles.bodyMuted}>
-          {isAuthenticated ? accountEmail : 'Mod local: setari disponibile pe dispozitiv'}
-        </Text>
-        {!isAuthenticated ? (
-          <TouchableOpacity style={styles.secondaryButton} onPress={onGoLogin}>
-            <Text style={styles.secondaryButtonText}>Autentificare pentru sincronizare server</Text>
-          </TouchableOpacity>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <AppText variant="subhead" tone="secondary" style={styles.intro}>
+          {signedIn
+            ? `Sincronizate cu contul ${accountUser.email}.`
+            : 'Setările se salvează doar pe acest dispozitiv. Intră în cont ca să le sincronizezi.'}
+          {settingsLoading ? ' Se actualizează...' : ''}
+        </AppText>
+
+        {signedIn ? (
+          <ListSection title="Profil">
+            <View style={styles.form}>
+              <AppText variant="caption" tone="secondary">
+                Nume afișat
+              </AppText>
+              <TextInput
+                style={styles.input}
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="Nume afișat"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="words"
+              />
+              <AppText variant="caption" tone="secondary">
+                Limbă
+              </AppText>
+              <TextInput
+                style={styles.input}
+                value={locale}
+                onChangeText={setLocale}
+                placeholder="ro-RO"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="none"
+              />
+              <Button title="Salvează profilul" size="sm" loading={busySection === 'profile'} onPress={saveProfile} />
+            </View>
+          </ListSection>
+        ) : (
+          <ListSection>
+            <ListItem icon="log-in-outline" iconColor={colors.brand} title="Intră în cont" onPress={() => navigation.navigate('Login')} />
+          </ListSection>
+        )}
+
+        <ListSection title="Notificări" footer={signedIn ? undefined : 'Disponibile după autentificare.'}>
+          <SwitchRow
+            title="Emailuri despre comenzi"
+            subtitle="Confirmări, livrare și modificări"
+            value={settings.notifications.email.orderUpdates}
+            disabled={!signedIn || busySection === 'notifications'}
+            onChange={(value) =>
+              void save('notifications', { notifications: { email: { orderUpdates: value } } }, 'Preferința a fost salvată.')
+            }
+          />
+          <SwitchRow
+            title="Alerte de securitate"
+            subtitle="Autentificări noi sau suspecte"
+            value={settings.notifications.push.securityAlerts}
+            disabled={!signedIn || busySection === 'notifications'}
+            onChange={(value) =>
+              void save('notifications', { notifications: { push: { securityAlerts: value } } }, 'Preferința a fost salvată.')
+            }
+          />
+          <SwitchRow
+            title="Produse revenite în stoc"
+            subtitle="Pentru produsele pe care le urmărești"
+            value={settings.notifications.push.backInStock}
+            disabled={!signedIn || busySection === 'notifications'}
+            onChange={(value) =>
+              void save('notifications', { notifications: { push: { backInStock: value } } }, 'Preferința a fost salvată.')
+            }
+          />
+        </ListSection>
+
+        <ListSection title="Confidențialitate">
+          <SwitchRow
+            title="Statistici anonime"
+            subtitle="Ne ajută să îmbunătățim aplicația"
+            value={settings.privacy.analyticsConsent.granted}
+            disabled={busySection === 'privacy'}
+            onChange={(value) =>
+              void save('privacy', { privacy: { analyticsConsent: { granted: value, source: SOURCE } } }, 'Acordul a fost actualizat.')
+            }
+          />
+          <SwitchRow
+            title="Recomandări personalizate"
+            subtitle="Pe baza produselor văzute"
+            value={settings.privacy.personalizationConsent.granted}
+            disabled={busySection === 'privacy'}
+            onChange={(value) =>
+              void save(
+                'privacy',
+                { privacy: { personalizationConsent: { granted: value, source: SOURCE } } },
+                'Acordul a fost actualizat.',
+              )
+            }
+          />
+          <SwitchRow
+            title="Oferte și noutăți"
+            subtitle="Comunicări comerciale pe email și în aplicație"
+            value={marketingGranted}
+            disabled={busySection === 'privacy'}
+            onChange={(value) =>
+              void save(
+                'privacy',
+                {
+                  privacy: { marketingConsent: { granted: value, source: SOURCE } },
+                  notifications: { email: { marketing: value }, push: { marketing: value }, inApp: { marketing: value } },
+                },
+                'Acordul a fost actualizat.',
+              )
+            }
+          />
+        </ListSection>
+
+        <ListSection title="Securitate">
+          <SwitchRow
+            title="Autentificare biometrică"
+            subtitle="Face ID sau amprentă pe acest dispozitiv"
+            value={biometricLoginEnabled}
+            onChange={() => void toggleBiometricLogin()}
+          />
+          {signedIn ? (
+            <SwitchRow
+              title="Alerte la autentificare"
+              value={settings.security.loginAlerts}
+              disabled={busySection === 'security'}
+              onChange={(value) => void save('security', { security: { loginAlerts: value } }, 'Setarea a fost salvată.')}
+            />
+          ) : null}
+          {signedIn ? (
+            <SwitchRow
+              title="Autentificare în doi pași"
+              value={settings.security.twoFactorEnabled}
+              disabled={busySection === 'security'}
+              onChange={(value) => void save('security', { security: { twoFactorEnabled: value } }, 'Setarea a fost salvată.')}
+            />
+          ) : null}
+          {signedIn ? (
+            <ListItem icon="phone-portrait-outline" title="Sesiuni active" onPress={() => navigation.navigate('DeviceSessions')} />
+          ) : null}
+        </ListSection>
+
+        {signedIn ? (
+          <ListSection title="Schimbă parola">
+            <View style={styles.form}>
+              <TextInput
+                style={styles.input}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                placeholder="Parola curentă"
+                placeholderTextColor={colors.textTertiary}
+                secureTextEntry
+                autoCapitalize="none"
+                textContentType="password"
+              />
+              <TextInput
+                style={styles.input}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="Parola nouă (minimum 8 caractere)"
+                placeholderTextColor={colors.textTertiary}
+                secureTextEntry
+                autoCapitalize="none"
+                textContentType="newPassword"
+              />
+              <Button
+                title="Schimbă parola"
+                size="sm"
+                variant="secondary"
+                loading={busySection === 'password'}
+                onPress={() => void submitPasswordChange()}
+              />
+            </View>
+          </ListSection>
         ) : null}
-        {normalizedStatusMessage ? (
-          <Text style={statusStyle}>{normalizedStatusMessage}</Text>
+
+        {signedIn ? (
+          <ListSection>
+            <ListItem icon="log-out-outline" title="Deconectare" destructive onPress={() => void logout()} />
+          </ListSection>
         ) : null}
-      </View>
-
-      <View style={styles.cardPlain}>
-        <View style={styles.sectionHeadRow}>
-          <Ionicons name="person-outline" size={18} color={colors.brandBlue} />
-          <Text style={styles.sectionLabel}>Profile</Text>
-        </View>
-        <Text style={styles.bodyMuted}>Nume afisat si limba preferata.</Text>
-        <TextInput
-          style={styles.addressInput}
-          placeholder="Nume afisat"
-          value={displayName}
-          onChangeText={setDisplayName}
-          editable={isAuthenticated && busySection !== 'profile'}
-        />
-        <TextInput
-          style={styles.addressInput}
-          placeholder="Locale (ex: ro-RO)"
-          value={locale}
-          onChangeText={setLocale}
-          editable={isAuthenticated && busySection !== 'profile'}
-          autoCapitalize="none"
-        />
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={saveProfile}
-          disabled={!isAuthenticated || busySection === 'profile'}
-        >
-          <Text style={styles.primaryButtonText}>
-            {busySection === 'profile' ? 'Se salveaza...' : 'Salveaza profilul'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.cardPlain}>
-        <View style={styles.sectionHeadRow}>
-          <Ionicons name="notifications-outline" size={18} color={colors.brandAmber} />
-          <Text style={styles.sectionLabel}>Notifications</Text>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Emailuri comanda</Text>
-            <Text style={styles.bodyMuted}>Stare livrare si modificari comanda</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.notifications.email.orderUpdates && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'notifications',
-                {
-                  notifications: {
-                    email: { orderUpdates: !settings.notifications.email.orderUpdates },
-                  },
-                },
-                'Preferinta de notificari email a fost actualizata.',
-              )
-            }
-            disabled={!isAuthenticated || busySection === 'notifications'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.notifications.email.orderUpdates && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.notifications.email.orderUpdates ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Push alerte securitate</Text>
-            <Text style={styles.bodyMuted}>Alerte la autentificari suspecte</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.notifications.push.securityAlerts && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'notifications',
-                {
-                  notifications: {
-                    push: { securityAlerts: !settings.notifications.push.securityAlerts },
-                  },
-                },
-                'Notificarile push de securitate au fost actualizate.',
-              )
-            }
-            disabled={!isAuthenticated || busySection === 'notifications'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.notifications.push.securityAlerts && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.notifications.push.securityAlerts ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Push back-in-stock</Text>
-            <Text style={styles.bodyMuted}>Anunt cand produsele favorite revin in stoc</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.notifications.push.backInStock && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'notifications',
-                {
-                  notifications: {
-                    push: { backInStock: !settings.notifications.push.backInStock },
-                  },
-                },
-                'Preferinta back-in-stock a fost actualizata.',
-              )
-            }
-            disabled={!isAuthenticated || busySection === 'notifications'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.notifications.push.backInStock && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.notifications.push.backInStock ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.cardPlain}>
-        <View style={styles.sectionHeadRow}>
-          <Ionicons name="shield-outline" size={18} color={colors.brandBlue} />
-          <Text style={styles.sectionLabel}>Privacy</Text>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Analytics</Text>
-            <Text style={styles.bodyMuted}>Date aggregate pentru imbunatatiri produs</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.privacy.analyticsConsent.granted && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'privacy',
-                {
-                  privacy: {
-                    analyticsConsent: {
-                      granted: !settings.privacy.analyticsConsent.granted,
-                      source,
-                    },
-                  },
-                },
-                'Consimtamantul pentru analytics a fost actualizat.',
-              )
-            }
-            disabled={busySection === 'privacy'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.privacy.analyticsConsent.granted && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.privacy.analyticsConsent.granted ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Personalizare</Text>
-            <Text style={styles.bodyMuted}>Recomandari bazate pe comportament</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.privacy.personalizationConsent.granted && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'privacy',
-                {
-                  privacy: {
-                    personalizationConsent: {
-                      granted: !settings.privacy.personalizationConsent.granted,
-                      source,
-                    },
-                  },
-                },
-                'Consimtamantul de personalizare a fost actualizat.',
-              )
-            }
-            disabled={busySection === 'privacy'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.privacy.personalizationConsent.granted && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.privacy.personalizationConsent.granted ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Marketing</Text>
-            <Text style={styles.bodyMuted}>
-              Sursa unica pentru acordul de comunicari comerciale
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.settingToggle, marketingGranted && styles.settingToggleActive]}
-            onPress={() =>
-              runToggle(
-                'privacy',
-                {
-                  privacy: { marketingConsent: { granted: !marketingGranted, source } },
-                  notifications: {
-                    email: { marketing: !marketingGranted },
-                    push: { marketing: !marketingGranted },
-                    inApp: { marketing: !marketingGranted },
-                  },
-                },
-                'Consimtamantul de marketing a fost actualizat.',
-              )
-            }
-            disabled={busySection === 'privacy'}
-          >
-            <Text
-              style={[styles.settingToggleText, marketingGranted && styles.settingToggleTextActive]}
-            >
-              {marketingGranted ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.cardPlain}>
-        <View style={styles.sectionHeadRow}>
-          <Ionicons name="lock-closed-outline" size={18} color={colors.brandRed} />
-          <Text style={styles.sectionLabel}>Security</Text>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Login biometric</Text>
-            <Text style={styles.bodyMuted}>Optiune locala pe acest dispozitiv</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.settingToggle, biometricEnabled && styles.settingToggleActive]}
-            onPress={onToggleBiometricLogin}
-          >
-            <Text
-              style={[styles.settingToggleText, biometricEnabled && styles.settingToggleTextActive]}
-            >
-              {biometricEnabled ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Alerte login</Text>
-            <Text style={styles.bodyMuted}>Notificari la autentificari noi</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.security.loginAlerts && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'security',
-                { security: { loginAlerts: !settings.security.loginAlerts } },
-                'Alertele de login au fost actualizate.',
-              )
-            }
-            disabled={!isAuthenticated || busySection === 'security'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.security.loginAlerts && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.security.loginAlerts ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.bodyText}>Two-factor authentication</Text>
-            <Text style={styles.bodyMuted}>Strat suplimentar pentru autentificare</Text>
-          </View>
-          <TouchableOpacity
-            style={[
-              styles.settingToggle,
-              settings.security.twoFactorEnabled && styles.settingToggleActive,
-            ]}
-            onPress={() =>
-              runToggle(
-                'security',
-                { security: { twoFactorEnabled: !settings.security.twoFactorEnabled } },
-                'Setarea 2FA a fost actualizata.',
-              )
-            }
-            disabled={!isAuthenticated || busySection === 'security'}
-          >
-            <Text
-              style={[
-                styles.settingToggleText,
-                settings.security.twoFactorEnabled && styles.settingToggleTextActive,
-              ]}
-            >
-              {settings.security.twoFactorEnabled ? 'ON' : 'OFF'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <TextInput
-          style={styles.addressInput}
-          placeholder="Parola curenta"
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-          secureTextEntry
-          editable={isAuthenticated && busySection !== 'password'}
-        />
-        <TextInput
-          style={styles.addressInput}
-          placeholder="Parola noua"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          secureTextEntry
-          editable={isAuthenticated && busySection !== 'password'}
-        />
-        <TouchableOpacity
-          style={styles.secondaryButton}
-          onPress={submitPasswordChange}
-          disabled={!isAuthenticated || busySection === 'password'}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {busySection === 'password' ? 'Se actualizeaza...' : 'Schimba parola'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.cardPlain}>
-        <View style={styles.sectionHeadRow}>
-          <Ionicons name="desktop-outline" size={18} color={colors.brandBlue} />
-          <Text style={styles.sectionLabel}>Sessions</Text>
-        </View>
-        <Text style={styles.bodyMuted}>
-          Gestioneaza dispozitivele conectate si sesiunea curenta.
-        </Text>
-        <View style={styles.accountInlineActions}>
-          <TouchableOpacity
-            style={[
-              styles.secondaryButton,
-              { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-            ]}
-            onPress={onOpenSessions}
-            disabled={!isAuthenticated}
-          >
-            <Ionicons name="eye-outline" size={16} color={colors.brandBlue} />
-            <Text style={styles.secondaryButtonText}>Vezi sesiuni active</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.secondaryButton,
-              { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-            ]}
-            onPress={onLogout}
-            disabled={!isAuthenticated}
-          >
-            <Ionicons name="log-out-outline" size={16} color={colors.brandRed} />
-            <Text style={styles.secondaryButtonText}>Deconectare</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
-};
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.grouped },
+  content: { padding: spacing.md, gap: spacing.lg, paddingBottom: spacing.xxl },
+  intro: { paddingHorizontal: spacing.xxs },
+  form: { padding: spacing.md, gap: spacing.xs },
+  input: {
+    height: 48,
+    borderRadius: radii.md,
+    ...continuous,
+    backgroundColor: colors.well,
+    paddingHorizontal: 14,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+    ...Platform.select({ web: { outlineWidth: 0 }, default: {} }),
+  },
+});

@@ -52,3 +52,20 @@ FIREBASE_SERVICE_ACCOUNT_PATH=/cale/catre/service-account.json
 ## Observație
 
 Scriptul rescrie catalogul complet. E gândit pentru sync manual controlat, nu incremental.
+
+## Catalogul inclus în aplicația mobilă
+
+Aplicația încarcă tot catalogul la pornire (în timpul splash screen-ului) din
+`apps/mobile/src/data/catalogProducts.json`, iar categoriile din `catalogBootstrap.json`.
+Toate produsele sunt disponibile imediat în categorii, căutare și coș, fără încărcare progresivă.
+
+Ca să actualizezi produsele din aplicație după un sync:
+
+```bash
+npm run export:catalog:snapshot   # Firestore → apps/mobile/src/data/catalogSnapshot.json
+npm run build:catalog:mobile      # snapshot → catalogBootstrap.json + catalogProducts.json
+```
+
+Apoi șterge `catalogSnapshot.json` (altfel o rulare ulterioară a `build:catalog:mobile` l-ar
+folosi din nou, chiar dacă e învechit) și fă un build nou al aplicației. Ordinea produselor din snapshot este ordinea din aplicație;
+primele produse apar ca recomandate pe ecranul principal.

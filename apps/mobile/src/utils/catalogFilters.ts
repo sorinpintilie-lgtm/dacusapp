@@ -39,18 +39,23 @@ export const formatPrice = (value: number | string | undefined) => {
   return `${amount.toLocaleString('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} RON`;
 };
 
-const normalizeText = (value: string) =>
+const foldText = (value: string) =>
   value
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/[\u0300-\u036f]/g, '');
+
+const normalizeText = (value: string) => foldText(value).replace(/\s+/g, ' ').trim();
 
 const hasAnyKeyword = (text: string, keywords: string[]) => keywords.some((keyword) => text.includes(keyword));
 
 const LIMITED_STOCK_KEYWORDS = ['stoc limitat', 'ultimele bucati', 'stoc redus', 'limited'];
+// Checked first: negated labels such as "Nu este în stoc" also contain "in stoc".
 const OUT_OF_STOCK_KEYWORDS = [
+  'nu este in stoc',
+  'nu mai este in stoc',
+  'nu e in stoc',
+  'lipsa stoc',
   'indisponibil',
   'fara stoc',
   'stoc epuizat',
@@ -121,8 +126,11 @@ export const sortProducts = (items: CatalogProduct[], option: SortOption, query 
   const normalizedQuery = normalizeText(query);
   if (!normalizedQuery) return items;
 
+  // Score each product once: scoring normalizes several fields, and the comparator runs n log n times.
+  const scores = new Map(items.map((item) => [item, computeRelevanceScore(item, normalizedQuery)]));
+
   return [...items].sort((a, b) => {
-    const scoreDiff = computeRelevanceScore(b, normalizedQuery) - computeRelevanceScore(a, normalizedQuery);
+    const scoreDiff = (scores.get(b) ?? 0) - (scores.get(a) ?? 0);
     if (scoreDiff !== 0) return scoreDiff;
 
     const discountDiff = Number((b.oldPriceRon ?? 0) > b.priceRon) - Number((a.oldPriceRon ?? 0) > a.priceRon);
@@ -132,43 +140,59 @@ export const sortProducts = (items: CatalogProduct[], option: SortOption, query 
   });
 };
 
-export const getProductSearchHaystack = (product: CatalogProduct) =>
-  normalizeText(
-    `${product.name} ${product.brand} ${product.description ?? ''} ${product.handle ?? ''} ${product.sku ?? ''} ${product.id}`,
-  );
+// Folded search text per product, built on first search (it includes the description, so it is costly to
+// build for the whole catalog). Whitespace is not collapsed: query tokens never contain any.
+const searchHaystackCache = new WeakMap<CatalogProduct, string>();
+
+const getSearchHaystack = (product: CatalogProduct) => {
+  let haystack = searchHaystackCache.get(product);
+  if (haystack === undefined) {
+    haystack = foldText(
+      `${product.name} ${product.brand} ${product.description ?? ''} ${product.handle ?? ''} ${product.sku ?? ''} ${product.id}`,
+    );
+    searchHaystackCache.set(product, haystack);
+  }
+  return haystack;
+};
 
 export const filterProducts = (source: CatalogProduct[], options: FilterOptions): CatalogProduct[] => {
   const q = normalizeText(options.query);
   const queryTokens = q.length > 0 ? q.split(' ').filter((token) => token.length > 0) : [];
+  const brandFilter = options.brandFilter === 'toate' ? null : normalizeText(options.brandFilter);
 
   const filtered = source.filter((item) => {
-    const haystack = getProductSearchHaystack(item);
-    const queryMatch = queryTokens.length === 0 || queryTokens.every((token) => haystack.includes(token));
-    const brandMatch = options.brandFilter === 'toate' || normalizeText(item.brand) === normalizeText(options.brandFilter);
-    const priceMatch = matchesPriceFilter(item.priceRon, options.priceFilter);
-    const discountMatch = !options.onlyDiscount || (item.oldPriceRon ?? 0) > item.priceRon;
-    const stockMatch = !options.onlyInStock || isProductInStock(item);
+    if (brandFilter !== null && normalizeText(item.brand) !== brandFilter) return false;
+    if (!matchesPriceFilter(item.priceRon, options.priceFilter)) return false;
+    if (options.onlyDiscount && !((item.oldPriceRon ?? 0) > item.priceRon)) return false;
+    if (options.onlyInStock && !isProductInStock(item)) return false;
+    if (queryTokens.length === 0) return true;
 
-    return queryMatch && brandMatch && priceMatch && discountMatch && stockMatch;
+    const haystack = getSearchHaystack(item);
+    return queryTokens.every((token) => haystack.includes(token));
   });
 
   return sortProducts(filtered, options.sortOption, q);
 };
 
+// Runs over the whole catalog at startup: plain loops, no per-product arrays, sets or closures.
 export const buildProductIndexes = (products: CatalogProduct[]) => {
-  const productsById = new Map(products.map((product) => [product.id, product]));
+  const productsById = new Map<string, CatalogProduct>();
   const countByCategory = new Map<string, number>();
 
-  products.forEach((product) => {
+  for (const product of products) {
+    productsById.set(product.id, product);
+
     const membership = Array.isArray(product.categoryIds) && product.categoryIds.length > 0
       ? product.categoryIds
       : [product.categoryId];
 
-    const uniqueMembership = Array.from(new Set(membership.filter((value) => typeof value === 'string' && value.length > 0)).values());
-    uniqueMembership.forEach((categoryId) => {
+    for (let index = 0; index < membership.length; index += 1) {
+      const categoryId = membership[index];
+      // Count each category once per product, even when it is listed twice.
+      if (typeof categoryId !== 'string' || categoryId.length === 0 || membership.indexOf(categoryId) !== index) continue;
       countByCategory.set(categoryId, (countByCategory.get(categoryId) ?? 0) + 1);
-    });
-  });
+    }
+  }
 
   return { productsById, countByCategory };
 };

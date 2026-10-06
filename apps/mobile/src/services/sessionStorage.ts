@@ -41,6 +41,8 @@ type AppPreferences = {
     quantity: number;
     unitPriceRon?: number;
   }>;
+  recentSearches: string[];
+  savedSearches: string[];
   preferenceOnboarding: {
     completed: boolean;
     favoriteBrands: string[];
@@ -118,6 +120,8 @@ const defaultPreferences = (): AppPreferences => ({
   compareProductIds: [],
   savedCartLists: [],
   guestCart: [],
+  recentSearches: [],
+  savedSearches: [],
   preferenceOnboarding: {
     completed: false,
     favoriteBrands: [],
@@ -181,6 +185,12 @@ const normalizePreferences = (value: unknown): AppPreferences => {
             !!item && typeof item === 'object' && typeof item.productId === 'string',
         )
       : fallback.guestCart,
+    recentSearches: Array.isArray(parsed.recentSearches)
+      ? parsed.recentSearches.filter((item): item is string => typeof item === 'string' && item.length > 0)
+      : fallback.recentSearches,
+    savedSearches: Array.isArray(parsed.savedSearches)
+      ? parsed.savedSearches.filter((item): item is string => typeof item === 'string' && item.length > 0)
+      : fallback.savedSearches,
     preferenceOnboarding:
       parsed.preferenceOnboarding && typeof parsed.preferenceOnboarding === 'object'
         ? {
@@ -345,13 +355,21 @@ export const setAppPreferences = async (next: AppPreferences): Promise<void> => 
   }
 };
 
-export const updateAppPreferences = async (
+// Updates run one after another: each is a read-modify-write across awaits, so two concurrent
+// updates would otherwise start from the same state and the second would drop the first one's change.
+let preferencesQueue: Promise<unknown> = Promise.resolve();
+
+export const updateAppPreferences = (
   updater: (current: AppPreferences) => AppPreferences,
 ): Promise<AppPreferences> => {
-  const current = await getAppPreferences();
-  const next = normalizePreferences(updater(current));
-  await setAppPreferences(next);
-  return next;
+  const run = preferencesQueue.then(async () => {
+    const current = await getAppPreferences();
+    const next = normalizePreferences(updater(current));
+    await setAppPreferences(next);
+    return next;
+  });
+  preferencesQueue = run.catch(() => undefined);
+  return run;
 };
 
 export const getGuestCart = async (): Promise<AppPreferences['guestCart']> => {

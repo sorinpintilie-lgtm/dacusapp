@@ -16,7 +16,7 @@
       ],
       "expo-background-fetch"
     ],
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",

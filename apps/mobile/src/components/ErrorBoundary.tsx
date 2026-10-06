@@ -1,6 +1,6 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, typography, spacing, radii } from '../theme/tokens';
+import { colors, radii, spacing, textStyles } from '../theme/tokens';
 
 interface Props {
   children: ReactNode;
@@ -72,51 +72,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.lg,
-    backgroundColor: colors.background,
+    backgroundColor: colors.grouped,
   },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     width: '100%',
     maxWidth: 340,
   },
-  title: {
-    fontSize: typography.h2,
-    fontWeight: '800',
-    color: colors.brandBlack,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  title: { ...textStyles.title2, color: colors.textPrimary, textAlign: 'center' },
+  message: { ...textStyles.body, color: colors.textSecondary, textAlign: 'center' },
   errorDetails: {
-    fontSize: typography.caption,
-    color: colors.brandRed,
+    ...textStyles.caption,
+    color: colors.brand,
     textAlign: 'center',
-    fontFamily: 'monospace',
-    backgroundColor: '#FFF5F5',
+    backgroundColor: colors.brandTint,
     padding: spacing.sm,
-    borderRadius: radii.md,
+    borderRadius: radii.sm,
   },
   button: {
-    backgroundColor: colors.brandRed,
+    backgroundColor: colors.brand,
     borderRadius: radii.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: 'center',
   },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: typography.body,
-    fontWeight: '800',
-  },
+  buttonText: { ...textStyles.headline, color: colors.textInverse },
 });
 
 export default ErrorBoundary;

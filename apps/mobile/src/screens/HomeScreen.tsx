@@ -1,464 +1,540 @@
-import { useState } from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
-
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useScrollToTop } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { memo, useMemo } from 'react';
+import { FlatList, ScrollView, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
-import { ProductCard } from '../components/ProductCard';
-import { Skeleton } from '../components/Skeleton';
-import { AnimatedEntrance } from '../components/UXComponents';
-import { formatPrice } from '../utils/catalogFilters';
-import { fixRomanianMojibake } from '../utils/string';
-import type { ScreenStyles } from './screenTypes';
-import { colors, spacing } from '../theme/tokens';
+import { openAccountScreen } from '../navigation/navigationRef';
+import { useShopNavigation } from '../navigation/hooks';
+import type { HomeStackParamList } from '../navigation/types';
+import { useApp } from '../state/AppProvider';
+import { colors, continuous, fonts, radii, shadows, spacing } from '../theme/tokens';
+import {
+  AppText,
+  enterUp,
+  hasImageUrl,
+  IconButton,
+  ProductRail,
+  SearchTrigger,
+  SectionHeader,
+  sizedImageUrl,
+  Touchable,
+} from '../ui';
+import { RoofMark } from '../ui/RoofMark';
+import { isProductInStock } from '../utils/catalogFilters';
+import { useStableCallback } from '../utils/useStableCallback';
 
-type HomeSection = {
-  category: CatalogCategory;
-  products: CatalogProduct[];
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const logo = require('../../assets/dacus-logo.png');
+
+const SHELF_LIMIT = 12;
+const HERO_COUNT = 4;
+const BRAND_ROW_HEIGHT = 44;
+const SEARCH_HEIGHT = 46;
+const HEADER_GAP = spacing.xs;
+/** How far the header slides up: the logo row leaves, the search bar stays. */
+const COLLAPSE_DISTANCE = BRAND_ROW_HEIGHT + HEADER_GAP;
+
+type HomeRow =
+  | { type: 'hero'; key: string }
+  | { type: 'categories'; key: string }
+  | { type: 'recent'; key: string }
+  | { type: 'deals'; key: string; products: CatalogProduct[] }
+  | { type: 'loyalty'; key: string }
+  | { type: 'recommended'; key: string; products: CatalogProduct[] }
+  | { type: 'shelf'; key: string; category: CatalogCategory; products: CatalogProduct[] };
+
+/** Products worth showing first: in stock and with a photo. */
+const showcase = (items: CatalogProduct[], limit: number) => {
+  const picked: CatalogProduct[] = [];
+  for (const item of items) {
+    if (isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl)) picked.push(item);
+    if (picked.length >= limit) break;
+  }
+  return picked;
 };
 
-type HomeScreenProps = {
-  styles: ScreenStyles;
-  isLoading: boolean;
-  catalogError: string | null;
-  featuredCategories: CatalogCategory[];
-  homeCategories: CatalogCategory[];
-  homeProducts: CatalogProduct[];
-  continueBrowsingProducts: CatalogProduct[];
-  continueBrowsingCategories: CatalogCategory[];
-  sectionsByCategory: HomeSection[];
-  hasMoreCategories: boolean;
-  onOpenCategories: () => void;
-  onOpenLoyalty: () => void;
-  onOpenProducts: () => void;
-  onOpenCategory: (categoryId: string) => void;
-  onOpenProduct: (productId: string) => void;
-  onAddToCart: (productId: string) => void;
+/** An even spread over the whole catalog, so recommendations aren't all from the first category. */
+const spread = (items: CatalogProduct[], limit: number) => {
+  const pool = items.filter((item) => isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl));
+  if (pool.length <= limit) return pool;
+  const step = pool.length / limit;
+  return Array.from({ length: limit }, (_, index) => pool[Math.floor(index * step + step / 2)] as CatalogProduct);
 };
 
-const HOME_FEATURED_PRODUCTS_LIMIT = 8;
-const HOME_CATEGORY_TILES_LIMIT = 6;
-const hasImageUrl = (value: string | undefined): value is string =>
-  !!value && /^https?:\/\//.test(value);
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<HomeRow>);
 
-export const HomeScreen = ({
-  styles,
-  isLoading,
-  catalogError,
-  featuredCategories,
-  homeCategories,
-  homeProducts,
-  continueBrowsingProducts,
-  continueBrowsingCategories,
-  sectionsByCategory,
-  hasMoreCategories,
-  onOpenCategories,
-  onOpenLoyalty,
-  onOpenProducts,
-  onOpenCategory,
-  onOpenProduct,
-  onAddToCart,
-}: HomeScreenProps) => {
-  const { width } = useWindowDimensions();
-  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const popularCategories = featuredCategories.length > 0 ? featuredCategories : homeCategories;
-  const heroProducts = [...homeProducts, ...continueBrowsingProducts].slice(0, 5);
-  const visualShelves = sectionsByCategory.slice(0, 3);
-  const heroSlides = heroProducts.length > 0 ? heroProducts : [];
+export function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const rootNavigation = useNavigation();
+  const { openProduct, openSearch } = useShopNavigation();
+  const {
+    products,
+    featuredCategories,
+    orderedCategories,
+    homeSections,
+    countByCategory,
+    continueBrowsingProducts,
+    wishlist,
+    toggleWishlist,
+    addToCart,
+    accountUser,
+    loyalty,
+    unreadInboxCount,
+    trackCategoryView,
+  } = useApp();
 
-  const categoryProductCount = sectionsByCategory.reduce<Map<string, number>>((acc, section) => {
-    acc.set(section.category.id, section.products.length);
-    return acc;
-  }, new Map());
+  const listRef = useAnimatedRef<FlatList<HomeRow>>();
+  useScrollToTop(listRef as unknown as React.RefObject<FlatList<HomeRow>>);
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
 
-  const heroSlideWidth = Math.max(280, width - 32);
-  const renderedHeroSlides = heroSlides.length > 0 ? heroSlides : [null];
+  const addProductToCart = useStableCallback((productId: string) => addToCart(productId));
+
+  const openCategory = useStableCallback((category: CatalogCategory) => {
+    trackCategoryView(category.id);
+    navigation.navigate('ProductList', { categoryId: category.id, title: category.name });
+  });
+
+  const rows = useMemo<HomeRow[]>(() => {
+    const deals = products.filter((item) => (item.oldPriceRon ?? 0) > item.priceRon && isProductInStock(item));
+    return [
+      { type: 'hero', key: 'hero' },
+      { type: 'categories', key: 'categories' },
+      ...(continueBrowsingProducts.length > 0 ? [{ type: 'recent' as const, key: 'recent' }] : []),
+      ...(deals.length >= 3 ? [{ type: 'deals' as const, key: 'deals', products: deals.slice(0, SHELF_LIMIT) }] : []),
+      { type: 'loyalty', key: 'loyalty' },
+      { type: 'recommended', key: 'recommended', products: spread(products, SHELF_LIMIT) },
+      ...homeSections.map((section) => ({
+        type: 'shelf' as const,
+        key: `shelf-${section.category.id}`,
+        category: section.category,
+        products: showcase(section.products, SHELF_LIMIT),
+      })),
+    ];
+  }, [continueBrowsingProducts.length, homeSections, products]);
+
+  const rail = (items: CatalogProduct[]) => (
+    <ProductRail
+      products={items}
+      onPressProduct={openProduct}
+      onAddToCart={addProductToCart}
+      wishlist={wishlist}
+      onToggleWishlist={toggleWishlist}
+    />
+  );
+
+  const renderRow: ListRenderItem<HomeRow> = ({ item, index }) => {
+    let content: React.ReactNode = null;
+    switch (item.type) {
+      case 'hero':
+        content = (
+          <HeroCarousel
+            categories={featuredCategories.slice(0, HERO_COUNT)}
+            countByCategory={countByCategory}
+            onOpen={openCategory}
+          />
+        );
+        break;
+      case 'categories':
+        content = (
+          <View style={styles.block}>
+            <SectionHeader
+              title="Categorii"
+              onAction={() => rootNavigation.navigate('MainTabs', { screen: 'CategoriesTab' })}
+              style={styles.gutter}
+            />
+            <CategoryShortcuts categories={orderedCategories} onOpen={openCategory} />
+          </View>
+        );
+        break;
+      case 'recent':
+        content = (
+          <View style={styles.block}>
+            <SectionHeader title="Văzute recent" style={styles.gutter} />
+            {rail(continueBrowsingProducts)}
+          </View>
+        );
+        break;
+      case 'deals':
+        content = (
+          <View style={styles.block}>
+            <SectionHeader title="Reduceri" subtitle="Prețuri mai mici, cât sunt pe stoc" style={styles.gutter} />
+            {rail(item.products)}
+          </View>
+        );
+        break;
+      case 'loyalty':
+        content = (
+          <LoyaltyBanner
+            signedIn={!!accountUser}
+            points={loyalty.points}
+            tier={loyalty.tier}
+            onPress={() =>
+              accountUser ? rootNavigation.navigate('MainTabs', { screen: 'LoyaltyTab' }) : rootNavigation.navigate('Login')
+            }
+          />
+        );
+        break;
+      case 'recommended':
+        content = (
+          <View style={styles.block}>
+            <SectionHeader title="Recomandate pentru tine" style={styles.gutter} />
+            {rail(item.products)}
+          </View>
+        );
+        break;
+      case 'shelf':
+        content = (
+          <View style={styles.block}>
+            <SectionHeader
+              title={item.category.name}
+              onAction={() => openCategory(item.category)}
+              style={styles.gutter}
+            />
+            {rail(item.products)}
+          </View>
+        );
+        break;
+    }
+    return <Animated.View entering={enterUp(index)}>{content}</Animated.View>;
+  };
+
+  const headerHeight = insets.top + spacing.xs + BRAND_ROW_HEIGHT + HEADER_GAP + SEARCH_HEIGHT + spacing.sm;
 
   return (
-    <View style={styles.stackLarge}>
-      <AnimatedEntrance>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          decelerationRate="fast"
-          snapToInterval={heroSlideWidth}
-          disableIntervalMomentum
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.homeHeroCarousel}
-          onMomentumScrollEnd={(event) => {
-            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / heroSlideWidth);
-            setActiveHeroIndex(nextIndex);
-          }}
-        >
-          {renderedHeroSlides.map((heroProduct, index) => {
-            const heroImageUrl = heroProduct?.thumbnailUrl ?? heroProduct?.imageUrl;
-            const heroHeadline =
-              typeof heroProduct?.name === 'string' && heroProduct.name.trim().length > 0
-                ? fixRomanianMojibake(heroProduct.name.trim())
-                : 'Echipamente și scule pentru lucru serios';
-            const heroPriceLabel =
-              typeof heroProduct?.priceRon === 'number' ? formatPrice(heroProduct.priceRon) : null;
-
-            return (
-              <View
-                key={heroProduct?.id ?? `hero-${index}`}
-                style={[styles.homeHeroSlide, { width: heroSlideWidth }]}
-              >
-                <View style={styles.homeHeroShell}>
-                  <View style={styles.homeHeroLayout}>
-                    <View style={styles.homeHeroMediaWrap}>
-                      <View style={styles.homeHeroMediaCard}>
-                        {hasImageUrl(heroImageUrl) ? (
-                          <Image
-                            source={{ uri: heroImageUrl }}
-                            style={styles.homeHeroMediaImage}
-                            resizeMode="contain"
-                          />
-                        ) : (
-                          <View style={styles.homeHeroMediaFallback}>
-                            <Text style={styles.homeHeroMediaFallbackText}>DACUS</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={styles.homeHeroContentPanel}>
-                      <View style={styles.homeHeroContent}>
-                        <Text style={styles.homeHeroTitle} numberOfLines={4}>
-                          {heroHeadline}
-                        </Text>
-
-                        {heroPriceLabel ? (
-                          <View style={styles.homeHeroPriceBlock}>
-                            <Text style={styles.homeHeroPriceLabel}>Preț curent</Text>
-                            <Text style={styles.homeHeroPriceMain}>{heroPriceLabel}</Text>
-                          </View>
-                        ) : (
-                          <Text style={styles.bodyMuted}>
-                            Catalog curat, selecție rapidă și acces direct la produsele importante.
-                          </Text>
-                        )}
-                      </View>
-
-                      <TouchableOpacity
-                        style={styles.homeHeroPrimaryButton}
-                        onPress={() =>
-                          heroProduct?.id ? onOpenProduct(heroProduct.id) : onOpenProducts()
-                        }
-                      >
-                        <Text style={styles.homeHeroPrimaryButtonText}>
-                          {heroProduct?.id ? 'Deschide produsul' : 'Deschide catalogul'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-        {renderedHeroSlides.length > 1 ? (
-          <View style={styles.homeHeroDots}>
-            {renderedHeroSlides.map((heroProduct, index) => (
-              <View
-                key={`dot-${heroProduct?.id ?? index}`}
-                style={[styles.homeHeroDot, activeHeroIndex === index && styles.homeHeroDotActive]}
-              />
-            ))}
-          </View>
-        ) : null}
-      </AnimatedEntrance>
-
-      <AnimatedEntrance delay={55}>
-        <View style={styles.homeSectionCard}>
-          <View style={styles.sectionHeadRow}>
-            <View style={styles.sectionHeadLeft}>
-              <Ionicons name="speedometer-outline" size={18} color={colors.brandRed} />
-              <Text style={styles.sectionLabel}>Intră rapid în zonele populare</Text>
-            </View>
-            <TouchableOpacity onPress={onOpenCategories} style={styles.seeAllButton}>
-              <Text style={styles.seeAll}>Vezi toate</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.homeCategoryCarousel}
-          >
-            {popularCategories.slice(0, HOME_CATEGORY_TILES_LIMIT + 2).map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.homeCategoryCarouselCard}
-                onPress={() => onOpenCategory(category.id)}
-              >
-                <Text style={styles.homeCategoryCarouselTitle} numberOfLines={2}>
-                  {fixRomanianMojibake(category.name)}
-                </Text>
-                <Text style={styles.homeCategoryCarouselMeta} numberOfLines={1}>
-                  {categoryProductCount.get(category.id) ?? 0} produse
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </AnimatedEntrance>
-
-      {catalogError ? (
-        <View style={styles.homeAlertCard}>
-          <Text style={styles.homeAlertText}>{fixRomanianMojibake(catalogError)}</Text>
-        </View>
-      ) : null}
-
-      <AnimatedEntrance delay={82}>
-        <TouchableOpacity
-          activeOpacity={0.88}
-          style={{
-            backgroundColor: '#1E1E22',
-            borderRadius: 18,
-            padding: spacing.md,
-            gap: spacing.xs,
-          }}
-          onPress={onOpenLoyalty}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View style={styles.sectionHeadLeft}>
-              <Ionicons name="wallet-outline" size={18} color={colors.brandAmber} />
-              <Text style={[styles.sectionLabel, { color: '#FFFFFF' }]}>Program fidelitate Dacus</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.brandAmber} />
-          </View>
-          <Text style={{ color: 'rgba(255,255,255,0.70)', fontSize: 13, lineHeight: 19 }}>
-            Câștigă puncte la fiecare achiziție și transformă-le în vouchere de reducere.
-          </Text>
-          <View style={{ flexDirection: 'row', gap: spacing.xs, marginTop: 2 }}>
-            <View style={{ backgroundColor: 'rgba(255,184,0,0.16)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
-              <Text style={{ color: colors.brandAmber, fontSize: 11, fontWeight: '800' }}>100 pct = 5 RON</Text>
-            </View>
-            <View style={{ backgroundColor: 'rgba(255,184,0,0.16)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
-              <Text style={{ color: colors.brandAmber, fontSize: 11, fontWeight: '800' }}>Bronze · Silver · Gold</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </AnimatedEntrance>
-
-      <AnimatedEntrance delay={108}>
-        <View style={[styles.homeSectionCard, styles.homeFeaturedSectionCard]}>
-          <View style={styles.sectionHeadRow}>
-            <View style={styles.sectionHeadLeft}>
-              <Ionicons name="bag-handle-outline" size={18} color={colors.brandRed} />
-              <Text style={styles.sectionLabel}>Produse recomandate</Text>
-            </View>
-            <TouchableOpacity onPress={onOpenProducts} style={styles.seeAllButton}>
-              <Text style={styles.seeAll}>Catalog complet</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {isLoading ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.homeFeaturedCarousel}
-            >
-              <Skeleton height={256} width={206} />
-              <Skeleton height={256} width={206} />
-              <Skeleton height={256} width={206} />
-            </ScrollView>
-          ) : homeProducts.length === 0 ? (
-            <Text style={styles.bodyMuted}>
-              Produsele recomandate se încarcă. Revino în câteva momente.
-            </Text>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.homeFeaturedCarousel}
-            >
-              {homeProducts.slice(0, HOME_FEATURED_PRODUCTS_LIMIT).map((product) => (
-                <View key={product.id} style={styles.homeFeaturedCardWrap}>
-                  <ProductCard
-                    product={{
-                      ...product,
-                      name: fixRomanianMojibake(product.name),
-                      brand: fixRomanianMojibake(product.brand),
-                      stockLabel: fixRomanianMojibake(product.stockLabel),
-                    }}
-                    compact
-                    onOpen={onOpenProduct}
-                    onAdd={onAddToCart}
-                  />
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-      </AnimatedEntrance>
-
-      {visualShelves.length > 0
-        ? visualShelves.map((section, index) => (
-            <AnimatedEntrance key={section.category.id} delay={132 + index * 28}>
-              <View style={styles.homeShelfShowcase}>
-                <View style={styles.homeShelfHeader}>
-                  <View style={styles.homeShelfHeaderTop}>
-                    <View style={styles.sectionHeadLeft}>
-                      <Ionicons name="grid-outline" size={18} color={colors.brandRed} />
-                      <Text style={styles.sectionLabel}>
-                        {fixRomanianMojibake(section.category.name)}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.homeShelfAction}
-                      onPress={() => onOpenCategory(section.category.id)}
-                    >
-                      <Text style={styles.homeShelfActionText}>Vezi categorie</Text>
-                      <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.bodyMuted}>
-                    {section.products.length} produse disponibile
-                  </Text>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.homeShelfCarousel}
-                >
-                  {section.products.slice(0, 5).map((product) => (
-                    <View key={product.id} style={styles.homeShelfCardWrap}>
-                      <ProductCard
-                        product={{
-                          ...product,
-                          name: fixRomanianMojibake(product.name),
-                          brand: fixRomanianMojibake(product.brand),
-                          stockLabel: fixRomanianMojibake(product.stockLabel),
-                        }}
-                        compact
-                        onOpen={onOpenProduct}
-                        onAdd={onAddToCart}
-                      />
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            </AnimatedEntrance>
-          ))
-        : null}
-
-      <AnimatedEntrance delay={228}>
-        <View style={styles.homeSectionCard}>
-          <View style={styles.sectionHeadRow}>
-            <View style={styles.sectionHeadLeft}>
-              <Ionicons name="albums-outline" size={18} color={colors.brandBlue} />
-              <Text style={styles.sectionLabel}>Categorii de interes</Text>
-            </View>
-            <TouchableOpacity onPress={onOpenCategories} style={styles.seeAllButton}>
-              <Text style={styles.seeAll}>Vezi toate</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.homeChipWrap}>
-            {popularCategories.slice(0, HOME_CATEGORY_TILES_LIMIT + 2).map((category) => (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryChip}
-                onPress={() => onOpenCategory(category.id)}
-              >
-                <Text style={styles.categoryChipText}>
-                  {fixRomanianMojibake(category.name)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-      </AnimatedEntrance>
-
-      {continueBrowsingProducts.length > 0 || continueBrowsingCategories.length > 0 ? (
-        <AnimatedEntrance delay={254}>
-          <View style={styles.homeSectionCard}>
-            <View style={styles.sectionHeadRow}>
-              <View style={styles.sectionHeadLeft}>
-                <Ionicons name="time-outline" size={18} color={colors.brandBlue} />
-                <Text style={styles.sectionLabel}>Continuă rapid</Text>
-              </View>
-            </View>
-
-            {continueBrowsingCategories.length > 0 ? (
-              <View style={styles.homeChipWrap}>
-                {continueBrowsingCategories.map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={styles.categoryChip}
-                    onPress={() => onOpenCategory(category.id)}
-                  >
-                    <Text style={styles.categoryChipText}>
-                      {fixRomanianMojibake(category.name)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
-
-            {continueBrowsingProducts.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.homeCompactCarousel}
-              >
-                {continueBrowsingProducts.slice(0, 5).map((product) => (
-                  <View key={product.id} style={styles.homeCompactCarouselCard}>
-                    <ProductCard
-                      product={{
-                        ...product,
-                        name: fixRomanianMojibake(product.name),
-                        brand: fixRomanianMojibake(product.brand),
-                        stockLabel: fixRomanianMojibake(product.stockLabel),
-                      }}
-                      compact
-                      onOpen={onOpenProduct}
-                      onAdd={onAddToCart}
-                    />
-                  </View>
-                ))}
-              </ScrollView>
-            ) : null}
-          </View>
-        </AnimatedEntrance>
-      ) : null}
-
-      <AnimatedEntrance delay={282}>
-        <View style={styles.homeTrustCard}>
-          <View style={styles.sectionHeadLeft}>
-            <Ionicons name="shield-checkmark-outline" size={18} color={colors.success} />
-            <Text style={styles.sectionLabel}>Comandă clar, fără surprize</Text>
-          </View>
-          <Text style={styles.bodyMuted}>
-            Retur simplu 14 zile, verificare stoc și suport Dacus înainte de finalizare.
-          </Text>
-          <View style={styles.homeTrustActions}>
-            <TouchableOpacity style={styles.primaryButton} onPress={onOpenProducts}>
-              <Ionicons
-                name="bag-handle-outline"
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: spacing.xs }}
-              />
-              <Text style={styles.primaryButtonText}>Continuă cumpărăturile</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={onOpenLoyalty}>
-              <Ionicons
-                name="wallet-outline"
-                size={16}
-                color={colors.brandRed}
-                style={{ marginRight: spacing.xs }}
-              />
-              <Text style={styles.secondaryButtonText}>Program fidelitate</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </AnimatedEntrance>
+    <View style={styles.screen}>
+      <AnimatedFlatList
+        ref={listRef}
+        data={rows}
+        keyExtractor={(row) => row.key}
+        renderItem={renderRow}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.content, { paddingTop: headerHeight + spacing.xs }]}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={4}
+        windowSize={5}
+      />
+      <HomeHeader
+        scrollY={scrollY}
+        topInset={insets.top}
+        unread={accountUser ? unreadInboxCount : 0}
+        onSearch={() => openSearch()}
+        onInbox={() => openAccountScreen('Inbox')}
+      />
     </View>
   );
+}
+
+type HomeHeaderProps = {
+  scrollY: SharedValue<number>;
+  topInset: number;
+  unread: number;
+  onSearch: () => void;
+  onInbox: () => void;
 };
+
+/** Logo row slides away as you scroll; the search bar docks at the top. */
+function HomeHeader({ scrollY, topInset, unread, onSearch, onInbox }: HomeHeaderProps) {
+  const slideStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: -interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [0, COLLAPSE_DISTANCE], Extrapolation.CLAMP) },
+    ],
+  }));
+  const brandStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE * 0.7], [1, 0], Extrapolation.CLAMP),
+  }));
+  const dividerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [COLLAPSE_DISTANCE, COLLAPSE_DISTANCE + 24], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  return (
+    <View style={styles.headerHost} pointerEvents="box-none">
+      <Animated.View style={[styles.header, { paddingTop: topInset + spacing.xs }, slideStyle]}>
+        <Animated.View style={[styles.brandRow, brandStyle]}>
+          <Image source={logo} style={styles.logo} contentFit="contain" accessibilityLabel="Dacus" />
+          <IconButton icon="notifications-outline" accessibilityLabel="Notificări" onPress={onInbox} badge={unread} />
+        </Animated.View>
+        <SearchTrigger placeholder="Caută produse, branduri, coduri" onPress={onSearch} />
+        <Animated.View style={[styles.divider, dividerStyle]} />
+      </Animated.View>
+      {/* Keeps the status bar area solid while the header slides under it. */}
+      <View style={[styles.statusCover, { height: topInset }]} />
+    </View>
+  );
+}
+
+type HeroCarouselProps = {
+  categories: CatalogCategory[];
+  countByCategory: Map<string, number>;
+  onOpen: (category: CatalogCategory) => void;
+};
+
+const HeroCarousel = memo(function HeroCarousel({ categories, countByCategory, onOpen }: HeroCarouselProps) {
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(width, 640) - spacing.md * 2;
+  const cardHeight = Math.round(cardWidth * 0.58);
+  const step = cardWidth + spacing.sm;
+  const scrollX = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollX.value = event.contentOffset.x;
+  });
+
+  if (categories.length === 0) return null;
+
+  return (
+    <View style={styles.heroBlock}>
+      <Animated.ScrollView
+        horizontal
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={step}
+        contentContainerStyle={styles.heroContent}
+      >
+        {categories.map((category) => (
+          <Touchable
+            key={category.id}
+            onPress={() => onOpen(category)}
+            pressedScale={0.98}
+            accessibilityLabel={`${category.name}, ${(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse`}
+            style={[styles.heroCard, { width: cardWidth, height: cardHeight }]}
+          >
+            {hasImageUrl(category.imageUrl) ? (
+              <Image
+                source={sizedImageUrl(category.imageUrl, cardWidth)}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={250}
+              />
+            ) : null}
+            <LinearGradient
+              colors={['rgba(12,11,10,0)', 'rgba(12,11,10,0.15)', 'rgba(12,11,10,0.78)']}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.heroText}>
+              <AppText variant="display" tone="inverse" numberOfLines={2}>
+                {category.name}
+              </AppText>
+              <View style={styles.heroMeta}>
+                <AppText variant="callout" tone="inverseMuted">
+                  {(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse
+                </AppText>
+                <View style={styles.heroCta}>
+                  <AppText variant="footnote" style={styles.heroCtaText}>
+                    Descoperă
+                  </AppText>
+                </View>
+              </View>
+            </View>
+          </Touchable>
+        ))}
+      </Animated.ScrollView>
+      {categories.length > 1 ? (
+        <View style={styles.dots}>
+          {categories.map((category, index) => (
+            <PagerDot key={category.id} index={index} step={step} scrollX={scrollX} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+});
+
+function PagerDot({ index, step, scrollX }: { index: number; step: number; scrollX: SharedValue<number> }) {
+  // The current page's dot stretches into a bar; neighbours shrink back as you swipe.
+  const style = useAnimatedStyle(() => {
+    const distance = Math.abs(scrollX.value / step - index);
+    const active = 1 - Math.min(distance, 1);
+    return {
+      width: 6 + active * 16,
+      backgroundColor: active > 0.5 ? colors.ink : colors.lineStrong,
+    };
+  });
+  return <Animated.View style={[styles.dot, style]} />;
+}
+
+function CategoryShortcuts({ categories, onOpen }: { categories: CatalogCategory[]; onOpen: (category: CatalogCategory) => void }) {
+  // Two rows that scroll together, so every category is one swipe away.
+  const columns = useMemo(() => {
+    const result: CatalogCategory[][] = [];
+    for (let index = 0; index < categories.length; index += 2) {
+      result.push(categories.slice(index, index + 2));
+    }
+    return result;
+  }, [categories]);
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcuts}>
+      {columns.map((column) => (
+        <View key={column[0]?.id} style={styles.shortcutColumn}>
+          {column.map((category) => (
+            <Touchable
+              key={category.id}
+              onPress={() => onOpen(category)}
+              pressedScale={0.95}
+              haptic="selection"
+              accessibilityLabel={category.name}
+              style={styles.shortcut}
+            >
+              <View style={styles.shortcutThumb}>
+                {hasImageUrl(category.imageUrl) ? (
+                  <Image source={sizedImageUrl(category.imageUrl, 36)} style={styles.shortcutImage} contentFit="cover" />
+                ) : null}
+              </View>
+              <AppText variant="subheadMedium" numberOfLines={1} style={styles.shortcutLabel}>
+                {category.name}
+              </AppText>
+            </Touchable>
+          ))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+type LoyaltyBannerProps = {
+  signedIn: boolean;
+  points: number;
+  tier: string;
+  onPress: () => void;
+};
+
+function LoyaltyBanner({ signedIn, points, tier, onPress }: LoyaltyBannerProps) {
+  return (
+    <View style={styles.gutter}>
+      <Touchable onPress={onPress} pressedScale={0.98} style={styles.loyalty} accessibilityLabel="Program de fidelitate">
+        <View style={styles.loyaltyMark} pointerEvents="none">
+          <RoofMark width={150} color={colors.brand} strokeWidth={8} />
+        </View>
+        <View style={styles.loyaltyTexts}>
+          <AppText variant="label" tone="inverseMuted">
+            {signedIn ? `NIVEL ${tier.toUpperCase()}` : 'PROGRAM DE FIDELITATE'}
+          </AppText>
+          <AppText variant="title1" tone="inverse">
+            {signedIn ? `${points.toLocaleString('ro-RO')} puncte` : 'Puncte la fiecare comandă'}
+          </AppText>
+          <AppText variant="subhead" tone="inverseMuted">
+            {signedIn ? '100 de puncte înseamnă 5 RON reducere.' : '1 punct pentru fiecare leu. 100 de puncte = 5 RON.'}
+          </AppText>
+        </View>
+        {/* Looks like a button; the whole card is the tap target. */}
+        <View style={styles.loyaltyCta}>
+          <AppText variant="footnote" style={styles.loyaltyCtaText}>
+            {signedIn ? 'Vezi cardul' : 'Intră în cont'}
+          </AppText>
+          <Ionicons name="arrow-forward" size={16} color={colors.textPrimary} />
+        </View>
+      </Touchable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
+  content: { paddingBottom: spacing.xxxl, gap: spacing.xxl },
+  gutter: { paddingHorizontal: spacing.md },
+  block: { gap: spacing.sm },
+
+  headerHost: { position: 'absolute', top: 0, left: 0, right: 0 },
+  header: {
+    backgroundColor: colors.canvas,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: HEADER_GAP,
+  },
+  brandRow: { height: BRAND_ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  logo: { width: 112, height: 36 },
+  divider: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+  statusCover: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.canvas },
+
+  heroBlock: { gap: spacing.sm },
+  heroContent: { paddingHorizontal: spacing.md, gap: spacing.sm },
+  heroCard: {
+    borderRadius: radii.lg,
+    ...continuous,
+    overflow: 'hidden',
+    backgroundColor: colors.charcoal,
+    justifyContent: 'flex-end',
+  },
+  heroText: { padding: spacing.lg, gap: spacing.xs },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  heroCta: {
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+  },
+  heroCtaText: { color: colors.textPrimary, fontFamily: fonts.semibold },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  dot: { height: 6, borderRadius: 3 },
+
+  shortcuts: { paddingHorizontal: spacing.md, gap: spacing.xs },
+  shortcutColumn: { gap: spacing.xs },
+  shortcut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    height: 48,
+    paddingLeft: 6,
+    paddingRight: 14,
+    borderRadius: radii.md,
+    ...continuous,
+    backgroundColor: colors.well,
+    maxWidth: 230,
+  },
+  shortcutThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    ...continuous,
+    overflow: 'hidden',
+    backgroundColor: colors.wellStrong,
+  },
+  shortcutImage: { width: '100%', height: '100%' },
+  shortcutLabel: { flexShrink: 1 },
+
+  loyalty: {
+    backgroundColor: colors.ink,
+    borderRadius: radii.lg,
+    ...continuous,
+    overflow: 'hidden',
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.float,
+  },
+  loyaltyMark: { position: 'absolute', top: -14, right: -26, opacity: 0.95 },
+  loyaltyTexts: { gap: spacing.xxs, paddingRight: 90 },
+  loyaltyCta: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 38,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    ...continuous,
+    backgroundColor: colors.surface,
+  },
+  loyaltyCtaText: { color: colors.textPrimary, fontFamily: fonts.semibold, fontSize: 14 },
+});

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CatalogProduct } from '../data/catalog';
-import { buildProductIndexes, filterProducts, formatPrice, isLikelyInStock, isProductInStock } from './catalogFilters';
+import {
+  buildProductIndexes,
+  filterProducts,
+  formatPrice,
+  isLikelyInStock,
+  isProductInStock,
+} from './catalogFilters';
 
 const sampleProducts: CatalogProduct[] = [
   {
@@ -73,6 +79,7 @@ describe('catalogFilters', () => {
     expect(isLikelyInStock('Disponibil')).toBe(true);
     expect(isLikelyInStock('Precomandă')).toBe(false);
     expect(isLikelyInStock('Indisponibil')).toBe(false);
+    expect(isLikelyInStock('Nu este în stoc')).toBe(false);
 
     const withVariants: CatalogProduct = {
       id: 'p-v',
@@ -170,5 +177,40 @@ describe('catalogFilters', () => {
     expect(countByCategory.get('root')).toBe(1);
     expect(countByCategory.get('root/sub-a')).toBe(1);
     expect(countByCategory.get('root/sub-b')).toBe(1);
+  });
+
+  it('counts a product once per category even when the category is listed twice', () => {
+    const { countByCategory } = buildProductIndexes([
+      {
+        id: 'dup-1',
+        categoryId: 'c-1',
+        categoryIds: ['c-1', 'c-2', 'c-1', ''],
+        name: 'Duplicate membership',
+        brand: 'Dacus',
+        priceRon: 10,
+        stockLabel: 'În stoc',
+      },
+    ]);
+
+    expect(countByCategory.get('c-1')).toBe(1);
+    expect(countByCategory.get('c-2')).toBe(1);
+    expect(countByCategory.has('')).toBe(false);
+  });
+
+  it('returns the same search results when the cached search text is reused', () => {
+    const options = {
+      query: 'bormasina',
+      brandFilter: 'toate',
+      priceFilter: 'toate' as const,
+      onlyDiscount: false,
+      onlyInStock: false,
+      sortOption: 'relevanta' as const,
+    };
+
+    const first = filterProducts(sampleProducts, options);
+    const second = filterProducts(sampleProducts, options);
+
+    expect(first.map((item) => item.id)).toEqual(['p-2']);
+    expect(second.map((item) => item.id)).toEqual(['p-2']);
   });
 });
