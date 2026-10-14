@@ -43,7 +43,7 @@ import {
 } from '../ui';
 import { RoofMark } from '../ui/RoofMark';
 import { isProductInStock } from '../utils/catalogFilters';
-import { categoryCover } from '../utils/categoryCover';
+import { departmentCover, type CategoryCover } from '../utils/categoryCover';
 import { useStableCallback } from '../utils/useStableCallback';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -51,7 +51,6 @@ const logo = require('../../assets/dacus-logo.png');
 
 const SHELF_LIMIT = 12;
 const HERO_COUNT = 4;
-const SHORTCUT_COUNT = 12;
 const BRAND_ROW_HEIGHT = 44;
 const SEARCH_HEIGHT = 46;
 const HEADER_GAP = spacing.xs;
@@ -59,6 +58,7 @@ const HEADER_GAP = spacing.xs;
 const COLLAPSE_DISTANCE = BRAND_ROW_HEIGHT + HEADER_GAP;
 
 type HomeRow =
+  | { type: 'greeting'; key: string }
   | { type: 'hero'; key: string }
   | { type: 'categories'; key: string }
   | { type: 'recent'; key: string }
@@ -100,11 +100,9 @@ export function HomeScreen() {
   const { openProduct, openSearch } = useShopNavigation();
   const {
     products,
-    featuredCategories,
-    orderedCategories,
+    departments,
     productsByCategory,
     homeSections,
-    countByCategory,
     continueBrowsingProducts,
     wishlist,
     toggleWishlist,
@@ -124,6 +122,21 @@ export function HomeScreen() {
 
   const addProductToCart = useStableCallback((productId: string) => addToCart(productId));
 
+  const openDepartment = useStableCallback((departmentId: string, name: string) => {
+    navigation.navigate('ProductList', { departmentId, title: name });
+  });
+
+  const entries = useMemo<HomeEntry[]>(
+    () =>
+      departments.map((department) => ({
+        id: department.id,
+        name: department.name,
+        count: department.productCount,
+        cover: departmentCover(department.lead, department.children, productsByCategory),
+      })),
+    [departments, productsByCategory],
+  );
+
   const openCategory = useStableCallback((category: CatalogCategory) => {
     trackCategoryView(category.id);
     navigation.navigate('ProductList', { categoryId: category.id, title: category.name });
@@ -134,6 +147,7 @@ export function HomeScreen() {
       (item) => (item.oldPriceRon ?? 0) > item.priceRon && isProductInStock(item),
     );
     return [
+      { type: 'greeting', key: 'greeting' },
       { type: 'hero', key: 'hero' },
       { type: 'categories', key: 'categories' },
       ...(continueBrowsingProducts.length > 0 ? [{ type: 'recent' as const, key: 'recent' }] : []),
@@ -164,14 +178,21 @@ export function HomeScreen() {
   const renderRow: ListRenderItem<HomeRow> = ({ item, index }) => {
     let content: React.ReactNode = null;
     switch (item.type) {
+      case 'greeting':
+        content = (
+          <View style={[styles.gutter, styles.greeting]}>
+            <AppText variant="title1">{greetingFor(new Date(), accountUser?.name)}</AppText>
+            <AppText variant="body" tone="secondary">
+              Ce amenajăm azi?
+            </AppText>
+          </View>
+        );
+        break;
       case 'hero':
         content = (
           <HeroCarousel
-            categories={featuredCategories
-              .filter((category) => hasImageUrl(category.imageUrl))
-              .slice(0, HERO_COUNT)}
-            countByCategory={countByCategory}
-            onOpen={openCategory}
+            entries={entries.filter((entry) => entry.cover.kind === 'photo').slice(0, HERO_COUNT)}
+            onOpen={openDepartment}
           />
         );
         break;
@@ -183,11 +204,7 @@ export function HomeScreen() {
               onAction={() => rootNavigation.navigate('MainTabs', { screen: 'CategoriesTab' })}
               style={styles.gutter}
             />
-            <CategoryShortcuts
-              categories={orderedCategories}
-              productsByCategory={productsByCategory}
-              onOpen={openCategory}
-            />
+            <CategoryShortcuts entries={entries} onOpen={openDepartment} />
           </View>
         );
         break;
@@ -337,17 +354,28 @@ function HomeHeader({ scrollY, topInset, unread, onSearch, onInbox }: HomeHeader
   );
 }
 
-type HeroCarouselProps = {
-  categories: CatalogCategory[];
-  countByCategory: Map<string, number>;
-  onOpen: (category: CatalogCategory) => void;
+/** "Bună dimineața", "Bună ziua" or "Bună seara", with the first name when signed in. */
+const greetingFor = (now: Date, fullName?: string | null) => {
+  const hour = now.getHours();
+  const greeting =
+    hour >= 5 && hour < 11
+      ? 'Bună dimineața'
+      : hour >= 11 && hour < 18
+        ? 'Bună ziua'
+        : 'Bună seara';
+  const firstName = fullName?.trim().split(/s+/)[0];
+  return firstName ? `${greeting}, ${firstName}` : greeting;
 };
 
-const HeroCarousel = memo(function HeroCarousel({
-  categories,
-  countByCategory,
-  onOpen,
-}: HeroCarouselProps) {
+/** A department as shown on Home: name, product count and cover. */
+type HomeEntry = { id: string; name: string; count: number; cover: CategoryCover };
+
+type HeroCarouselProps = {
+  entries: HomeEntry[];
+  onOpen: (id: string, name: string) => void;
+};
+
+const HeroCarousel = memo(function HeroCarousel({ entries, onOpen }: HeroCarouselProps) {
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width, 640) - spacing.md * 2;
   const cardHeight = Math.round(cardWidth * 0.58);
@@ -357,7 +385,7 @@ const HeroCarousel = memo(function HeroCarousel({
     scrollX.value = event.contentOffset.x;
   });
 
-  if (categories.length === 0) return null;
+  if (entries.length === 0) return null;
 
   return (
     <View style={styles.heroBlock}>
@@ -370,17 +398,17 @@ const HeroCarousel = memo(function HeroCarousel({
         snapToInterval={step}
         contentContainerStyle={styles.heroContent}
       >
-        {categories.map((category) => (
+        {entries.map((entry) => (
           <Touchable
-            key={category.id}
-            onPress={() => onOpen(category)}
+            key={entry.id}
+            onPress={() => onOpen(entry.id, entry.name)}
             pressedScale={0.98}
-            accessibilityLabel={`${category.name}, ${(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse`}
+            accessibilityLabel={`${entry.name}, ${entry.count.toLocaleString('ro-RO')} produse`}
             style={[styles.heroCard, { width: cardWidth, height: cardHeight }]}
           >
-            {hasImageUrl(category.imageUrl) ? (
+            {entry.cover.kind === 'photo' ? (
               <Image
-                source={sizedImageUrl(category.imageUrl, cardWidth)}
+                source={sizedImageUrl(entry.cover.uri, cardWidth)}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 transition={250}
@@ -393,11 +421,11 @@ const HeroCarousel = memo(function HeroCarousel({
             />
             <View style={styles.heroText}>
               <AppText variant="display" tone="inverse" numberOfLines={2}>
-                {category.name}
+                {entry.name}
               </AppText>
               <View style={styles.heroMeta}>
                 <AppText variant="callout" tone="inverseMuted">
-                  {(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse
+                  {entry.count.toLocaleString('ro-RO')} produse
                 </AppText>
                 <View style={styles.heroCta}>
                   <AppText variant="footnote" style={styles.heroCtaText}>
@@ -409,10 +437,10 @@ const HeroCarousel = memo(function HeroCarousel({
           </Touchable>
         ))}
       </Animated.ScrollView>
-      {categories.length > 1 ? (
+      {entries.length > 1 ? (
         <View style={styles.dots}>
-          {categories.map((category, index) => (
-            <PagerDot key={category.id} index={index} step={step} scrollX={scrollX} />
+          {entries.map((entry, index) => (
+            <PagerDot key={entry.id} index={index} step={step} scrollX={scrollX} />
           ))}
         </View>
       ) : null}
@@ -442,21 +470,19 @@ function PagerDot({
 }
 
 type CategoryShortcutsProps = {
-  categories: CatalogCategory[];
-  productsByCategory: Map<string, CatalogProduct[]>;
-  onOpen: (category: CatalogCategory) => void;
+  entries: HomeEntry[];
+  onOpen: (id: string, name: string) => void;
 };
 
-function CategoryShortcuts({ categories, productsByCategory, onOpen }: CategoryShortcutsProps) {
-  // The biggest categories in two rows that scroll together; "Vezi tot" opens the full list.
+function CategoryShortcuts({ entries, onOpen }: CategoryShortcutsProps) {
+  // Every department in two rows that scroll together; "Vezi tot" opens the full directory.
   const columns = useMemo(() => {
-    const top = categories.slice(0, SHORTCUT_COUNT);
-    const result: CatalogCategory[][] = [];
-    for (let index = 0; index < top.length; index += 2) {
-      result.push(top.slice(index, index + 2));
+    const result: HomeEntry[][] = [];
+    for (let index = 0; index < entries.length; index += 2) {
+      result.push(entries.slice(index, index + 2));
     }
     return result;
-  }, [categories]);
+  }, [entries]);
 
   return (
     <ScrollView
@@ -466,15 +492,15 @@ function CategoryShortcuts({ categories, productsByCategory, onOpen }: CategoryS
     >
       {columns.map((column) => (
         <View key={column[0]?.id} style={styles.shortcutColumn}>
-          {column.map((category) => {
-            const cover = categoryCover(category, productsByCategory.get(category.id));
+          {column.map((entry) => {
+            const { cover } = entry;
             return (
               <Touchable
-                key={category.id}
-                onPress={() => onOpen(category)}
+                key={entry.id}
+                onPress={() => onOpen(entry.id, entry.name)}
                 pressedScale={0.95}
                 haptic="selection"
-                accessibilityLabel={category.name}
+                accessibilityLabel={entry.name}
                 style={styles.shortcut}
               >
                 <View style={styles.shortcutThumb}>
@@ -494,7 +520,7 @@ function CategoryShortcuts({ categories, productsByCategory, onOpen }: CategoryS
                   )}
                 </View>
                 <AppText variant="subheadMedium" numberOfLines={1} style={styles.shortcutLabel}>
-                  {category.name}
+                  {entry.name}
                 </AppText>
               </Touchable>
             );
@@ -554,6 +580,8 @@ const styles = StyleSheet.create({
   content: { paddingBottom: spacing.xxxl, gap: spacing.xxl },
   gutter: { paddingHorizontal: spacing.md },
   block: { gap: spacing.sm },
+  // Pulls the hero closer: greeting and hero read as one opening moment.
+  greeting: { gap: 2, marginBottom: -spacing.md },
 
   headerHost: { position: 'absolute', top: 0, left: 0, right: 0 },
   header: {

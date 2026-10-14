@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { Alert, Linking, Platform, Share } from 'react-native';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
+import { buildDepartments } from '../data/departments';
 import { useCatalog } from '../hooks/useCatalog';
 import { closeAuthScreens, currentRouteName, goHome, openAccountScreen, openCart, openLogin } from '../navigation/navigationRef';
 import {
@@ -301,6 +302,8 @@ function useAppState() {
       .filter((section) => section.products.length > 0)
       .slice(0, HOME_SECTIONS_LIMIT);
   }, [categories, products]);
+
+  const departments = useMemo(() => buildDepartments(categories, productsByCategory), [categories, productsByCategory]);
 
   const orderedCategories = useMemo(() => {
     const favorites = new Set(favoriteCategoryIds);
@@ -1337,6 +1340,7 @@ function useAppState() {
     countByCategory,
     productsByCategory,
     orderedCategories,
+    departments,
     featuredCategories,
     homeSections,
     trendingSearches,

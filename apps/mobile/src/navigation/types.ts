@@ -3,6 +3,8 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { ProductListFilters } from '../state/productListFilters';
 
 export type ProductListParams = {
+  /** A whole department (several collections), with its collections as filter chips. */
+  departmentId?: string;
   categoryId?: string;
   query?: string;
   title?: string;

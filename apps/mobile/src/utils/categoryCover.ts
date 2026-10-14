@@ -24,3 +24,19 @@ export const categoryCover = (
   }
   return fallback ? { kind: 'product', uri: fallback } : { kind: 'none' };
 };
+
+/** A department's cover: its own collection photo, else a sub-collection photo, else a product photo. */
+export const departmentCover = (
+  lead: CatalogCategory | undefined,
+  children: CatalogCategory[],
+  productsByCategory: Map<string, CatalogProduct[]>,
+): CategoryCover => {
+  const members = [...(lead ? [lead] : []), ...children];
+  const photo = members.find((category) => isHttpUrl(category.imageUrl));
+  if (photo?.imageUrl) return { kind: 'photo', uri: photo.imageUrl };
+  for (const category of members) {
+    const cover = categoryCover(category, productsByCategory.get(category.id));
+    if (cover.kind !== 'none') return cover;
+  }
+  return { kind: 'none' };
+};

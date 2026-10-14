@@ -3,10 +3,18 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type ListRenderItem,
+} from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type { CatalogCategory } from '../data/catalog';
+import type { Department } from '../data/departments';
 import type { CategoriesStackParamList } from '../navigation/types';
 import { useApp } from '../state/AppProvider';
 import { colors, continuous, radii, spacing } from '../theme/tokens';
@@ -19,35 +27,19 @@ import {
   sizedImageUrl,
   Touchable,
 } from '../ui';
-import { categoryCover, type CategoryCover } from '../utils/categoryCover';
+import { categoryCover, departmentCover, type CategoryCover } from '../utils/categoryCover';
 import { foldForSearch } from '../utils/search';
 
 const GAP = spacing.sm;
 
-type Row = { key: string; items: CatalogCategory[]; featured: boolean };
-
-/** One wide tile first, then pairs: a rhythm instead of an even grid of identical boxes. */
-const toRows = (categories: CatalogCategory[]): Row[] => {
-  const rows: Row[] = [];
-  let index = 0;
-  if (categories.length > 0) {
-    rows.push({
-      key: `row-${categories[0]?.id}`,
-      items: [categories[0] as CatalogCategory],
-      featured: true,
-    });
-    index = 1;
-  }
-  for (; index < categories.length; index += 2) {
-    const items = categories.slice(index, index + 2);
-    rows.push({ key: `row-${items[0]?.id}`, items, featured: false });
-  }
-  return rows;
-};
+type Row =
+  | { kind: 'department'; key: string; department: Department }
+  | { kind: 'matches'; key: string; items: CatalogCategory[] };
 
 export function CategoriesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CategoriesStackParamList>>();
-  const { orderedCategories, countByCategory, productsByCategory, trackCategoryView } = useApp();
+  const { categories, departments, countByCategory, productsByCategory, trackCategoryView } =
+    useApp();
   const { width } = useWindowDimensions();
   const [filter, setFilter] = useState('');
   const listRef = useRef<FlatList<Row>>(null);
@@ -56,38 +48,99 @@ export function CategoriesScreen() {
   const contentWidth = Math.min(width, 700) - spacing.md * 2;
   const halfWidth = (contentWidth - GAP) / 2;
 
-  const rows = useMemo(() => {
+  // Browsing: one block per department. Filtering: every matching collection, two per row.
+  const rows = useMemo<Row[]>(() => {
     const needle = foldForSearch(filter);
-    const matches = needle
-      ? orderedCategories.filter((category) =>
-          ` ${foldForSearch(category.name)}`.includes(` ${needle}`),
-        )
-      : orderedCategories;
-    // While filtering, every match gets the same size.
-    return needle ? pairs(matches) : toRows(matches);
-  }, [filter, orderedCategories]);
+    if (!needle) {
+      return departments.map((department) => ({
+        kind: 'department',
+        key: department.id,
+        department,
+      }));
+    }
+    const matches = categories.filter(
+      (category) =>
+        (countByCategory.get(category.id) ?? 0) > 0 &&
+        ` ${foldForSearch(category.name)}`.includes(` ${needle}`),
+    );
+    const result: Row[] = [];
+    for (let index = 0; index < matches.length; index += 2) {
+      result.push({
+        kind: 'matches',
+        key: `match-${matches[index]?.id}`,
+        items: matches.slice(index, index + 2),
+      });
+    }
+    return result;
+  }, [categories, countByCategory, departments, filter]);
 
   const openCategory = (category: CatalogCategory) => {
     trackCategoryView(category.id);
     navigation.navigate('ProductList', { categoryId: category.id, title: category.name });
   };
 
-  const renderRow: ListRenderItem<Row> = ({ item, index }) => (
-    <Animated.View entering={enterUp(index)} style={styles.row}>
-      {item.items.map((category) => (
-        <CategoryTile
-          key={category.id}
-          category={category}
-          cover={categoryCover(category, productsByCategory.get(category.id))}
-          count={countByCategory.get(category.id) ?? 0}
-          width={item.featured ? contentWidth : halfWidth}
-          height={item.featured ? Math.round(contentWidth * 0.5) : Math.round(halfWidth * 1.08)}
-          featured={item.featured}
-          onPress={() => openCategory(category)}
+  const openDepartment = (department: Department) => {
+    if (department.lead) trackCategoryView(department.lead.id);
+    navigation.navigate('ProductList', { departmentId: department.id, title: department.name });
+  };
+
+  const renderRow: ListRenderItem<Row> = ({ item, index }) => {
+    if (item.kind === 'matches') {
+      return (
+        <Animated.View entering={enterUp(index)} style={styles.matchRow}>
+          {item.items.map((category) => (
+            <CoverTile
+              key={category.id}
+              title={category.name}
+              subtitle={`${(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse`}
+              cover={categoryCover(category, productsByCategory.get(category.id))}
+              width={halfWidth}
+              height={Math.round(halfWidth * 0.9)}
+              onPress={() => openCategory(category)}
+            />
+          ))}
+        </Animated.View>
+      );
+    }
+
+    const { department } = item;
+    return (
+      <Animated.View entering={enterUp(index)} style={styles.department}>
+        <CoverTile
+          title={department.name}
+          subtitle={`${department.productCount.toLocaleString('ro-RO')} produse`}
+          cover={departmentCover(department.lead, department.children, productsByCategory)}
+          width={contentWidth}
+          height={Math.round(contentWidth * 0.42)}
+          large
+          onPress={() => openDepartment(department)}
         />
-      ))}
-    </Animated.View>
-  );
+        {department.children.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pills}
+            style={styles.pillsScroller}
+          >
+            {department.children.map((child) => (
+              <Touchable
+                key={child.id}
+                onPress={() => openCategory(child)}
+                pressedScale={0.94}
+                haptic="selection"
+                accessibilityLabel={child.name}
+                style={styles.pill}
+              >
+                <AppText variant="subheadMedium" numberOfLines={1}>
+                  {child.name}
+                </AppText>
+              </Touchable>
+            ))}
+          </ScrollView>
+        ) : null}
+      </Animated.View>
+    );
+  };
 
   return (
     <FlatList
@@ -99,7 +152,7 @@ export function CategoriesScreen() {
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      initialNumToRender={6}
+      initialNumToRender={5}
       windowSize={7}
       ListHeaderComponent={
         <SearchField
@@ -124,43 +177,33 @@ export function CategoriesScreen() {
   );
 }
 
-const pairs = (categories: CatalogCategory[]): Row[] => {
-  const rows: Row[] = [];
-  for (let index = 0; index < categories.length; index += 2) {
-    const items = categories.slice(index, index + 2);
-    rows.push({ key: `match-${items[0]?.id}`, items, featured: false });
-  }
-  return rows;
-};
-
-type CategoryTileProps = {
-  category: CatalogCategory;
+type CoverTileProps = {
+  title: string;
+  subtitle: string;
   cover: CategoryCover;
-  count: number;
   width: number;
   height: number;
-  featured: boolean;
+  large?: boolean;
   onPress: () => void;
 };
 
-function CategoryTile({
-  category,
+function CoverTile({
+  title,
+  subtitle,
   cover,
-  count,
   width,
   height,
-  featured,
+  large = false,
   onPress,
-}: CategoryTileProps) {
-  const countLabel = `${count.toLocaleString('ro-RO')} produse`;
+}: CoverTileProps) {
   const photo = cover.kind === 'photo';
 
   return (
     <Touchable
       onPress={onPress}
-      pressedScale={0.97}
+      pressedScale={0.98}
       style={[styles.tile, photo ? styles.tilePhoto : styles.tileProduct, { width, height }]}
-      accessibilityLabel={`${category.name}, ${countLabel}`}
+      accessibilityLabel={`${title}, ${subtitle}`}
     >
       {photo ? (
         <>
@@ -171,14 +214,14 @@ function CategoryTile({
             transition={200}
           />
           <LinearGradient
-            colors={['rgba(12,11,10,0)', 'rgba(12,11,10,0.72)']}
-            locations={[0.35, 1]}
+            colors={['rgba(12,11,10,0)', 'rgba(12,11,10,0.74)']}
+            locations={[0.3, 1]}
             style={StyleSheet.absoluteFill}
           />
         </>
       ) : (
-        // No collection photo: a product from the category, shown whole on the light well, with dark text.
-        <View style={styles.productCover}>
+        // No collection photo: a product from it, shown whole on the light well, with dark text.
+        <View style={[styles.productCover, large && styles.productCoverLarge]}>
           <View style={styles.productBlend}>
             <ProductImage
               uri={cover.kind === 'product' ? sizedImageUrl(cover.uri, width) : undefined}
@@ -187,16 +230,22 @@ function CategoryTile({
           </View>
         </View>
       )}
-      <View style={styles.tileText}>
+      <View
+        style={[
+          styles.tileText,
+          large && styles.tileTextLarge,
+          large && !photo && styles.tileTextBeside,
+        ]}
+      >
         <AppText
-          variant={featured ? 'title1' : 'headline'}
+          variant={large ? 'title1' : 'headline'}
           tone={photo ? 'inverse' : 'primary'}
           numberOfLines={2}
         >
-          {category.name}
+          {title}
         </AppText>
         <AppText variant="footnote" tone={photo ? 'inverseMuted' : 'secondary'}>
-          {countLabel}
+          {subtitle}
         </AppText>
       </View>
     </Touchable>
@@ -204,15 +253,25 @@ function CategoryTile({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxxl, gap: GAP },
-  filter: { marginBottom: spacing.xs },
-  row: { flexDirection: 'row', gap: GAP },
+  content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxxl, gap: spacing.xl },
+  filter: { marginBottom: -spacing.xs },
+  department: { gap: spacing.sm },
+  matchRow: { flexDirection: 'row', gap: GAP, marginBottom: -spacing.sm },
+  // Pills run edge to edge while the cards keep the page margin.
+  pillsScroller: { marginHorizontal: -spacing.md },
+  pills: { paddingHorizontal: spacing.md, gap: spacing.xs },
+  pill: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.well,
+    justifyContent: 'center',
+  },
   tile: {
     borderRadius: radii.md,
     ...continuous,
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    isolation: 'isolate',
   },
   // Dark under photos (they end up under a dark scrim anyway), light for product covers.
   tilePhoto: { backgroundColor: colors.charcoal },
@@ -226,6 +285,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.well,
     isolation: 'isolate',
   },
+  // Wide cards: the product sits on the right, the title on the left.
+  productCoverLarge: { left: '45%', paddingBottom: spacing.sm },
   productBlend: { flex: 1, mixBlendMode: 'multiply' },
   tileText: { padding: spacing.sm, gap: 2 },
+  tileTextLarge: { padding: spacing.lg },
+  tileTextBeside: { paddingRight: '45%' },
 });

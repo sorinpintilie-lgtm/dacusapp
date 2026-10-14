@@ -1,6 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator, type NativeStackNavigationOptions } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountScreen } from '../screens/AccountScreen';
@@ -70,8 +73,11 @@ const largeTitleOptions: NativeStackNavigationOptions = {
 };
 
 // A category's products are listed by id so opening a second category pushes a new list.
-const productListId = ({ params }: { params: { categoryId?: string; query?: string } }) =>
-  params.categoryId ?? params.query;
+const productListId = ({
+  params,
+}: {
+  params: { departmentId?: string; categoryId?: string; query?: string };
+}) => params.departmentId ?? params.categoryId ?? params.query;
 
 function HomeStackScreen() {
   return (
@@ -90,7 +96,11 @@ function CategoriesStackScreen() {
         component={CategoriesScreen}
         options={{ title: 'Categorii', ...largeTitleOptions }}
       />
-      <CategoriesStack.Screen name="ProductList" component={ProductListScreen} getId={productListId} />
+      <CategoriesStack.Screen
+        name="ProductList"
+        component={ProductListScreen}
+        getId={productListId}
+      />
     </CategoriesStack.Navigator>
   );
 }
@@ -122,15 +132,35 @@ function LoyaltyStackScreen() {
 function AccountStackScreen() {
   return (
     <AccountStack.Navigator screenOptions={{ ...stackOptions, ...groupedOptions }}>
-      <AccountStack.Screen name="Account" component={AccountScreen} options={{ title: 'Contul meu', ...largeTitleOptions }} />
-      <AccountStack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Setări' }} />
-      <AccountStack.Screen name="Orders" component={OrdersScreen} options={{ title: 'Comenzile mele' }} />
+      <AccountStack.Screen
+        name="Account"
+        component={AccountScreen}
+        options={{ title: 'Contul meu', ...largeTitleOptions }}
+      />
+      <AccountStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ title: 'Setări' }}
+      />
+      <AccountStack.Screen
+        name="Orders"
+        component={OrdersScreen}
+        options={{ title: 'Comenzile mele' }}
+      />
       <AccountStack.Screen
         name="Wishlist"
         component={WishlistScreen}
-        options={{ title: 'Favorite', headerStyle: { backgroundColor: colors.canvas }, contentStyle: { backgroundColor: colors.canvas } }}
+        options={{
+          title: 'Favorite',
+          headerStyle: { backgroundColor: colors.canvas },
+          contentStyle: { backgroundColor: colors.canvas },
+        }}
       />
-      <AccountStack.Screen name="Addresses" component={AddressesScreen} options={{ title: 'Adrese de livrare' }} />
+      <AccountStack.Screen
+        name="Addresses"
+        component={AddressesScreen}
+        options={{ title: 'Adrese de livrare' }}
+      />
       <AccountStack.Screen name="Inbox" component={InboxScreen} options={{ title: 'Notificări' }} />
     </AccountStack.Navigator>
   );
@@ -181,13 +211,24 @@ function MainTabs() {
       screenListeners={{ tabPress: () => haptics.selection() }}
     >
       <Tabs.Screen name="HomeTab" component={HomeStackScreen} options={{ title: 'Acasă' }} />
-      <Tabs.Screen name="CategoriesTab" component={CategoriesStackScreen} options={{ title: 'Categorii' }} />
+      <Tabs.Screen
+        name="CategoriesTab"
+        component={CategoriesStackScreen}
+        options={{ title: 'Categorii' }}
+      />
       <Tabs.Screen
         name="CartTab"
         component={CartStackScreen}
-        options={{ title: 'Coș', tabBarAccessibilityLabel: cartCount > 0 ? `Coș, ${cartCount} produse` : 'Coș' }}
+        options={{
+          title: 'Coș',
+          tabBarAccessibilityLabel: cartCount > 0 ? `Coș, ${cartCount} produse` : 'Coș',
+        }}
       />
-      <Tabs.Screen name="LoyaltyTab" component={LoyaltyStackScreen} options={{ title: 'Fidelitate' }} />
+      <Tabs.Screen
+        name="LoyaltyTab"
+        component={LoyaltyStackScreen}
+        options={{ title: 'Fidelitate' }}
+      />
       <Tabs.Screen name="AccountTab" component={AccountStackScreen} options={{ title: 'Cont' }} />
     </Tabs.Navigator>
   );
@@ -216,7 +257,11 @@ export function RootNavigator() {
       />
       <RootStack.Group screenOptions={{ presentation: 'modal' }}>
         <RootStack.Screen name="Login" component={LoginScreen} options={{ title: '' }} />
-        <RootStack.Screen name="Register" component={RegisterScreen} options={{ title: 'Cont nou' }} />
+        <RootStack.Screen
+          name="Register"
+          component={RegisterScreen}
+          options={{ title: 'Cont nou' }}
+        />
         <RootStack.Screen
           name="AddressEditor"
           component={AddressEditorScreen}

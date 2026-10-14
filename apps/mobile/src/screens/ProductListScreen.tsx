@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useScrollToTop } from '@react-navigation/native';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Switch, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  View,
+  useWindowDimensions,
+  type ListRenderItem,
+} from 'react-native';
 import Animated, { FadeInDown, FadeOutDown, ReduceMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,21 +37,39 @@ import {
   ProductRow,
   Sheet,
   StockLine,
+  Touchable,
 } from '../ui';
-import { filterProducts, formatPrice, isProductInStock, type PriceFilterOption, type SortOption } from '../utils/catalogFilters';
+import {
+  filterProducts,
+  formatPrice,
+  isProductInStock,
+  type PriceFilterOption,
+  type SortOption,
+} from '../utils/catalogFilters';
 import { searchProducts } from '../utils/search';
+import { departmentProducts } from '../data/departments';
 import { useStableCallback } from '../utils/useStableCallback';
 
 const COLUMNS = 2;
 const GRID_GAP = spacing.sm;
-const PRICE_OPTIONS: PriceFilterOption[] = ['toate', 'sub200', 'intre200si500', 'intre500si1000', 'peste1000'];
+const PRICE_OPTIONS: PriceFilterOption[] = [
+  'toate',
+  'sub200',
+  'intre200si500',
+  'intre500si1000',
+  'peste1000',
+];
 const SORT_OPTIONS: SortOption[] = ['relevanta', 'pretCrescator', 'pretDescrescator', 'numeAZ'];
 
 const barEnter = FadeInDown.duration(220).reduceMotion(ReduceMotion.System);
 const barExit = FadeOutDown.duration(160).reduceMotion(ReduceMotion.System);
 
 /** The list (category or ranked search matches) narrowed by the filters; the ranking survives "Relevanță". */
-const computeResults = (scope: CatalogProduct[], filters: ProductListFilters, wishlist: Set<string>) => {
+const computeResults = (
+  scope: CatalogProduct[],
+  filters: ProductListFilters,
+  wishlist: Set<string>,
+) => {
   const matches = filterProducts(scope, { ...filters, query: '' });
   return filters.onlyFavorites ? matches.filter((product) => wishlist.has(product.id)) : matches;
 };
@@ -59,6 +85,7 @@ export function ProductListScreen() {
     products,
     productsByCategory,
     categories,
+    departments,
     wishlist,
     toggleWishlist,
     addToCart,
@@ -74,7 +101,10 @@ export function ProductListScreen() {
 
   const query = params.query?.trim() ?? '';
   const baseline = query ? SEARCH_DEFAULT_FILTERS : DEFAULT_PRODUCT_FILTERS;
-  const [filters, setFilters] = useState<ProductListFilters>(() => ({ ...baseline, ...params.initialFilters }));
+  const [filters, setFilters] = useState<ProductListFilters>(() => ({
+    ...baseline,
+    ...params.initialFilters,
+  }));
   const [draftFilters, setDraftFilters] = useState<ProductListFilters>(filters);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
@@ -83,17 +113,34 @@ export function ProductListScreen() {
   const listRef = useRef<FlatList<CatalogProduct>>(null);
   useScrollToTop(listRef);
 
-  const categoryName = params.categoryId ? categories.find((item) => item.id === params.categoryId)?.name : undefined;
-  const title = params.title ?? categoryName ?? (query ? `„${query}”` : 'Produse');
+  const department = params.departmentId
+    ? departments.find((item) => item.id === params.departmentId)
+    : undefined;
+  // In a department, one of its collections can be picked from the tabs above the filters.
+  const [collectionId, setCollectionId] = useState<string | null>(null);
+  const categoryName = params.categoryId
+    ? categories.find((item) => item.id === params.categoryId)?.name
+    : undefined;
+  const title =
+    params.title ?? department?.name ?? categoryName ?? (query ? `„${query}”` : 'Produse');
 
   // What the filters narrow down: the category, or the ranked search matches.
   const search = useMemo(() => (query ? searchProducts(products, query) : null), [products, query]);
+  const departmentScope = useMemo(
+    () => (department ? departmentProducts(department, products) : null),
+    [department, products],
+  );
   const scope = useMemo(() => {
     if (search) return search.products;
+    if (departmentScope)
+      return collectionId ? (productsByCategory.get(collectionId) ?? []) : departmentScope;
     return params.categoryId ? (productsByCategory.get(params.categoryId) ?? []) : products;
-  }, [params.categoryId, products, productsByCategory, search]);
+  }, [collectionId, departmentScope, params.categoryId, products, productsByCategory, search]);
 
-  const results = useMemo(() => computeResults(scope, filters, wishlist), [filters, scope, wishlist]);
+  const results = useMemo(
+    () => computeResults(scope, filters, wishlist),
+    [filters, scope, wishlist],
+  );
   const draftCount = useMemo(
     () => (filterSheetOpen ? computeResults(scope, draftFilters, wishlist).length : 0),
     [draftFilters, filterSheetOpen, scope, wishlist],
@@ -113,7 +160,12 @@ export function ProductListScreen() {
     navigation.setOptions({
       title,
       headerRight: () => (
-        <IconButton icon="search" accessibilityLabel="Caută" onPress={() => openSearch(query || undefined)} size={38} />
+        <IconButton
+          icon="search"
+          accessibilityLabel="Caută"
+          onPress={() => openSearch(query || undefined)}
+          size={38}
+        />
       ),
     });
   }, [navigation, openSearch, query, title]);
@@ -138,7 +190,17 @@ export function ProductListScreen() {
         onToggleCompare={toggleCompareProduct}
       />
     ),
-    [addProductToCart, cardWidth, compareFull, compareMode, compareSet, openProduct, toggleCompareProduct, toggleWishlist, wishlist],
+    [
+      addProductToCart,
+      cardWidth,
+      compareFull,
+      compareMode,
+      compareSet,
+      openProduct,
+      toggleCompareProduct,
+      toggleWishlist,
+      wishlist,
+    ],
   );
 
   const applyFilters = (next: ProductListFilters) => {
@@ -159,10 +221,35 @@ export function ProductListScreen() {
   const activeFilterCount = countActiveFilters(filters, baseline);
   const resultLabel = `${results.length.toLocaleString('ro-RO')} ${results.length === 1 ? 'produs' : 'produse'}`;
 
+  const pickCollection = (id: string | null) => {
+    setCollectionId(id);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
   const toolbar = (
     <View style={styles.toolbar}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        <Chip label="Filtre" icon="options-outline" count={activeFilterCount} selected={activeFilterCount > 0} onPress={openFilterSheet} />
+      {department && department.children.length > 0 ? (
+        <CollectionTabs
+          items={[
+            { id: null, label: 'Toate' },
+            ...department.children.map((child) => ({ id: child.id, label: child.name })),
+          ]}
+          selected={collectionId}
+          onSelect={pickCollection}
+        />
+      ) : null}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+      >
+        <Chip
+          label="Filtre"
+          icon="options-outline"
+          count={activeFilterCount}
+          selected={activeFilterCount > 0}
+          onPress={openFilterSheet}
+        />
         <Chip
           label={SORT_LABELS[filters.sortOption]}
           icon="swap-vertical"
@@ -170,9 +257,22 @@ export function ProductListScreen() {
           selected={filters.sortOption !== 'relevanta'}
           onPress={() => setSortSheetOpen(true)}
         />
-        <Chip label="În stoc" selected={filters.onlyInStock} onPress={() => updateFilter('onlyInStock', !filters.onlyInStock)} />
-        <Chip label="Reduceri" selected={filters.onlyDiscount} onPress={() => updateFilter('onlyDiscount', !filters.onlyDiscount)} />
-        <Chip label="Compară" icon="git-compare-outline" selected={compareMode} onPress={() => setCompareMode((current) => !current)} />
+        <Chip
+          label="În stoc"
+          selected={filters.onlyInStock}
+          onPress={() => updateFilter('onlyInStock', !filters.onlyInStock)}
+        />
+        <Chip
+          label="Reduceri"
+          selected={filters.onlyDiscount}
+          onPress={() => updateFilter('onlyDiscount', !filters.onlyDiscount)}
+        />
+        <Chip
+          label="Compară"
+          icon="git-compare-outline"
+          selected={compareMode}
+          onPress={() => setCompareMode((current) => !current)}
+        />
       </ScrollView>
       <View style={styles.summary}>
         <AppText variant="footnote" tone="secondary">
@@ -196,7 +296,10 @@ export function ProductListScreen() {
         renderItem={renderItem}
         numColumns={COLUMNS}
         columnWrapperStyle={styles.row}
-        contentContainerStyle={[styles.content, { paddingBottom: (compareMode ? 110 : spacing.xxl) + insets.bottom }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: (compareMode ? 110 : spacing.xxl) + insets.bottom },
+        ]}
         ListHeaderComponent={toolbar}
         stickyHeaderIndices={[0]}
         initialNumToRender={6}
@@ -207,7 +310,11 @@ export function ProductListScreen() {
         ListEmptyComponent={
           <EmptyState
             icon={query ? 'search-outline' : 'cube-outline'}
-            title={query && scope.length === 0 ? `Niciun rezultat pentru „${query}”` : 'Niciun produs găsit'}
+            title={
+              query && scope.length === 0
+                ? `Niciun rezultat pentru „${query}”`
+                : 'Niciun produs găsit'
+            }
             message={
               activeFilterCount > 0
                 ? 'Filtrele active ascund toate produsele. Scoate câteva ca să vezi mai multe.'
@@ -215,14 +322,20 @@ export function ProductListScreen() {
                   ? 'Verifică ortografia sau încearcă un termen mai general.'
                   : 'Categoria nu are produse momentan.'
             }
-            actionLabel={activeFilterCount > 0 ? 'Resetează filtrele' : query ? 'Caută altceva' : undefined}
+            actionLabel={
+              activeFilterCount > 0 ? 'Resetează filtrele' : query ? 'Caută altceva' : undefined
+            }
             onAction={activeFilterCount > 0 ? resetFilters : () => openSearch(query)}
           />
         }
       />
 
       {compareMode ? (
-        <Animated.View entering={barEnter} exiting={barExit} style={[styles.compareBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+        <Animated.View
+          entering={barEnter}
+          exiting={barExit}
+          style={[styles.compareBar, { paddingBottom: insets.bottom + spacing.sm }]}
+        >
           <View style={styles.compareTexts}>
             <AppText variant="headline">
               {compareProductIds.length} din {COMPARE_PRODUCTS_LIMIT} produse
@@ -231,7 +344,12 @@ export function ProductListScreen() {
               Atinge + pe produsele pe care vrei să le compari.
             </AppText>
           </View>
-          <Button title="Compară" size="md" disabled={compareProductIds.length < 2} onPress={() => setCompareSheetOpen(true)} />
+          <Button
+            title="Compară"
+            size="md"
+            disabled={compareProductIds.length < 2}
+            onPress={() => setCompareSheetOpen(true)}
+          />
         </Animated.View>
       ) : null}
 
@@ -304,17 +422,23 @@ export function ProductListScreen() {
             <ToggleRow
               label="Doar produse în stoc"
               value={draftFilters.onlyInStock}
-              onChange={(value) => setDraftFilters((current) => ({ ...current, onlyInStock: value }))}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, onlyInStock: value }))
+              }
             />
             <ToggleRow
               label="Doar produse la reducere"
               value={draftFilters.onlyDiscount}
-              onChange={(value) => setDraftFilters((current) => ({ ...current, onlyDiscount: value }))}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, onlyDiscount: value }))
+              }
             />
             <ToggleRow
               label="Doar favoritele mele"
               value={draftFilters.onlyFavorites}
-              onChange={(value) => setDraftFilters((current) => ({ ...current, onlyFavorites: value }))}
+              onChange={(value) =>
+                setDraftFilters((current) => ({ ...current, onlyFavorites: value }))
+              }
             />
           </View>
         </View>
@@ -386,11 +510,23 @@ export function ProductListScreen() {
         </View>
       </Sheet>
 
-      <Sheet visible={compareSheetOpen} onClose={() => setCompareSheetOpen(false)} title="Comparație">
+      <Sheet
+        visible={compareSheetOpen}
+        onClose={() => setCompareSheetOpen(false)}
+        title="Comparație"
+      >
         {compareProducts.length === 0 ? (
-          <EmptyState icon="git-compare-outline" title="Niciun produs ales" message="Activează Compară și alege produse din listă." />
+          <EmptyState
+            icon="git-compare-outline"
+            title="Niciun produs ales"
+            message="Activează Compară și alege produse din listă."
+          />
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.compareColumns}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.compareColumns}
+          >
             {compareProducts.map((product) => (
               <View key={product.id} style={styles.compareColumn}>
                 <ProductRow product={product} thumbSize={56} hidePrice />
@@ -421,13 +557,67 @@ export function ProductListScreen() {
             ))}
           </ScrollView>
         )}
-        {compareProducts.length > 0 ? <Button title="Golește comparația" variant="ghost" onPress={clearCompareProducts} /> : null}
+        {compareProducts.length > 0 ? (
+          <Button title="Golește comparația" variant="ghost" onPress={clearCompareProducts} />
+        ) : null}
       </Sheet>
     </View>
   );
 }
 
-function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
+type CollectionTab = { id: string | null; label: string };
+
+/** The department's collections as text tabs (an underline marks the current one), separate from the filter chips. */
+function CollectionTabs({
+  items,
+  selected,
+  onSelect,
+}: {
+  items: CollectionTab[];
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.tabs}
+    >
+      {items.map((item) => {
+        const active = item.id === selected;
+        return (
+          <Touchable
+            key={item.id ?? 'all'}
+            onPress={() => onSelect(item.id)}
+            pressedScale={0.95}
+            haptic="selection"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={styles.tab}
+          >
+            <AppText
+              variant={active ? 'headline' : 'callout'}
+              tone={active ? 'primary' : 'secondary'}
+            >
+              {item.label}
+            </AppText>
+            <View style={[styles.tabLine, active && styles.tabLineActive]} />
+          </Touchable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function ToggleRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
   return (
     <View style={styles.toggleRow}>
       <AppText variant="body" style={styles.flex}>
@@ -469,7 +659,22 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   chips: { paddingHorizontal: spacing.md, gap: spacing.xs },
-  summary: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  tabs: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+    marginBottom: spacing.xs,
+  },
+  tab: { paddingTop: spacing.xxs, gap: 6 },
+  tabLine: { height: 3, borderRadius: 2, backgroundColor: 'transparent' },
+  tabLineActive: { backgroundColor: colors.brand },
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
   summaryNote: { flex: 1 },
   compareBar: {
     position: 'absolute',
@@ -505,5 +710,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   compareRow: { gap: 1 },
-  compareActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  compareActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
 });
