@@ -35,6 +35,8 @@ type AppPreferences = {
       unitPriceRon?: number;
     }>;
   }>;
+  /** Stable id for this install; the API keys device sessions and push registration on it. */
+  deviceId: string;
   guestCart: Array<{
     productId: string;
     variantId?: string;
@@ -119,6 +121,7 @@ const defaultPreferences = (): AppPreferences => ({
   filterPresets: [],
   compareProductIds: [],
   savedCartLists: [],
+  deviceId: '',
   guestCart: [],
   recentSearches: [],
   savedSearches: [],
@@ -179,6 +182,7 @@ const normalizePreferences = (value: unknown): AppPreferences => {
             !!item && typeof item === 'object',
         )
       : fallback.savedCartLists,
+    deviceId: typeof parsed.deviceId === 'string' ? parsed.deviceId : fallback.deviceId,
     guestCart: Array.isArray(parsed.guestCart)
       ? parsed.guestCart.filter(
           (item): item is AppPreferences['guestCart'][number] =>
@@ -370,6 +374,14 @@ export const updateAppPreferences = (
   });
   preferencesQueue = run.catch(() => undefined);
   return run;
+};
+
+/** Returns this install's device id, saving `candidate` as it on first launch. */
+export const getOrCreateDeviceId = async (candidate: string): Promise<string> => {
+  const prefs = await getAppPreferences();
+  if (prefs.deviceId) return prefs.deviceId;
+  await updateAppPreferences((current) => ({ ...current, deviceId: current.deviceId || candidate }));
+  return (await getAppPreferences()).deviceId || candidate;
 };
 
 export const getGuestCart = async (): Promise<AppPreferences['guestCart']> => {

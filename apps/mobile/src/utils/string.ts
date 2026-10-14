@@ -127,3 +127,17 @@ export function fixRomanianMojibake(value: string): string {
   if (!value) return value;
   return value.replace(mojibakePattern, (match) => mojibakeFixMap[match] ?? match);
 }
+
+/**
+ * Romanian count + noun: "1 produs", "5 produse", "20 de produse", "3.360 de produse".
+ * From 20 on (and for round hundreds) Romanian puts "de" before the noun.
+ */
+export function countLabel(count: number, singular: string, plural: string): string {
+  const number = count.toLocaleString('ro-RO');
+  if (count === 1) return `${number} ${singular}`;
+  const lastTwo = Math.abs(count) % 100;
+  const needsDe = count !== 0 && (lastTwo === 0 || lastTwo >= 20);
+  return `${number} ${needsDe ? 'de ' : ''}${plural}`;
+}
+
+export const productCount = (count: number) => countLabel(count, 'produs', 'produse');

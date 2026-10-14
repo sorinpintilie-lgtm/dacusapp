@@ -29,6 +29,7 @@ import {
 } from '../ui';
 import { categoryCover, departmentCover, type CategoryCover } from '../utils/categoryCover';
 import { foldForSearch } from '../utils/search';
+import { productCount } from '../utils/string';
 
 const GAP = spacing.sm;
 
@@ -92,7 +93,7 @@ export function CategoriesScreen() {
             <CoverTile
               key={category.id}
               title={category.name}
-              subtitle={`${(countByCategory.get(category.id) ?? 0).toLocaleString('ro-RO')} produse`}
+              subtitle={productCount(countByCategory.get(category.id) ?? 0)}
               cover={categoryCover(category, productsByCategory.get(category.id))}
               width={halfWidth}
               height={Math.round(halfWidth * 0.9)}
@@ -108,7 +109,7 @@ export function CategoriesScreen() {
       <Animated.View entering={enterUp(index)} style={styles.department}>
         <CoverTile
           title={department.name}
-          subtitle={`${department.productCount.toLocaleString('ro-RO')} produse`}
+          subtitle={productCount(department.productCount)}
           cover={departmentCover(department.lead, department.children, productsByCategory)}
           width={contentWidth}
           height={Math.round(contentWidth * 0.42)}

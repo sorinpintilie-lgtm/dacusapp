@@ -49,6 +49,7 @@ import {
 import { searchProducts } from '../utils/search';
 import { departmentProducts } from '../data/departments';
 import { useStableCallback } from '../utils/useStableCallback';
+import { productCount } from '../utils/string';
 
 const COLUMNS = 2;
 const GRID_GAP = spacing.sm;
@@ -219,7 +220,7 @@ export function ProductListScreen() {
 
   const resetFilters = () => applyFilters({ ...baseline, sortOption: filters.sortOption });
   const activeFilterCount = countActiveFilters(filters, baseline);
-  const resultLabel = `${results.length.toLocaleString('ro-RO')} ${results.length === 1 ? 'produs' : 'produse'}`;
+  const resultLabel = productCount(results.length);
 
   const pickCollection = (id: string | null) => {
     setCollectionId(id);
@@ -392,7 +393,7 @@ export function ProductListScreen() {
               onPress={() => setDraftFilters({ ...baseline, sortOption: draftFilters.sortOption })}
             />
             <Button
-              title={`Arată ${draftCount.toLocaleString('ro-RO')} ${draftCount === 1 ? 'produs' : 'produse'}`}
+              title={`Arată ${productCount(draftCount)}`}
               style={styles.footerButtonWide}
               onPress={() => {
                 applyFilters(draftFilters);

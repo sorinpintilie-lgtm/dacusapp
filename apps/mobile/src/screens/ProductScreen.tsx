@@ -38,6 +38,7 @@ import {
 import { formatPrice, getStockBadgeTone } from '../utils/catalogFilters';
 import { getBundleProducts, getSimilarProducts, getUpsellProducts } from '../utils/recommendations';
 import { useStableCallback } from '../utils/useStableCallback';
+import { productCount } from '../utils/string';
 
 const STORE_URL = 'https://dacus.ro/products/';
 const ADDED_FEEDBACK_MS = 1600;
@@ -173,7 +174,7 @@ export function ProductScreen() {
 
   const addBundle = () => {
     bundleProducts.forEach((item) => addToCart(item.id, undefined, { silent: true }));
-    showToast(`Am adăugat în coș ${bundleProducts.length} produse.`);
+    showToast(`Am adăugat în coș ${productCount(bundleProducts.length)}.`);
   };
 
   return (

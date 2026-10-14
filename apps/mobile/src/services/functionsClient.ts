@@ -1,8 +1,8 @@
-import { httpsCallable } from 'firebase/functions';
+import { httpsCallable, type Functions } from 'firebase/functions';
 import { getApp, initializeApp } from 'firebase/app';
 import { firebaseConfig } from './firebaseAuth';
 
-let functions: any = null;
+let functions: Functions | null = null;
 
 
 const initFunctions = async () => {
@@ -145,21 +145,12 @@ export const getCart = async (): Promise<CartLine[]> => {
   return result.data as CartLine[];
 };
 
-interface AddToCartInput {
-  line: CartLine;
-}
-
 export const addToCart = async (line: CartLine): Promise<CartLine[]> => {
   const fns = await getFirebaseFunctions();
   const fn = httpsCallable(fns, 'addToCart');
   const result = await fn({ line });
   return result.data as CartLine[];
 };
-
-interface RemoveFromCartInput {
-  productId: string;
-  variantId?: string;
-}
 
 export const removeFromCart = async (
   productId: string,

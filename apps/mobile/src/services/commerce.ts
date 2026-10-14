@@ -1,28 +1,18 @@
 import { apiRequest } from './apiClient';
-import {
-  clearStoredSession,
-  getStoredSession,
-  setStoredSession,
-  type StoredSession,
-} from './sessionStorage';
+import { setStoredSession, type StoredSession } from './sessionStorage';
 import {
   loginWithFirebase,
   registerWithFirebase,
   logoutFromFirebase,
   getCurrentFirebaseUser,
-  getFirebaseIdToken,
   onFirebaseAuthChange,
-  type FirebaseUser,
 } from './firebaseAuth';
-import { authenticateWithBiometric, isBiometricAvailable } from './biometric';
 import {
-  getCatalog as getCatalogFromFn,
   getCart as getCartFromFn,
   addToCart as addToCartToFn,
   removeFromCart as removeFromCartFromFn,
   getAddresses as getAddressesFromFn,
   addAddress as addAddressToFn,
-  getOrders as getOrdersFromFn,
 } from './functionsClient';
 import type { CatalogProduct } from '../data/catalog';
 

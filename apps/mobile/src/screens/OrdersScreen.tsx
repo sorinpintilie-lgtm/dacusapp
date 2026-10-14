@@ -9,6 +9,7 @@ import { useApp } from '../state/AppProvider';
 import { colors, continuous, radii, spacing } from '../theme/tokens';
 import { AppText, Badge, EmptyState, hasImageUrl, Touchable, type BadgeTone } from '../ui';
 import { formatPrice } from '../utils/catalogFilters';
+import { productCount } from '../utils/string';
 
 const STATUS: Record<Order['status'], { label: string; tone: BadgeTone; step: number }> = {
   created: { label: 'Plasată', tone: 'neutral', step: 0 },
@@ -61,7 +62,7 @@ export function OrdersScreen() {
             </AppText>
             <AppText variant="caption" tone="secondary">
               {new Date(item.createdAt).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' })},{' '}
-              {quantity} {quantity === 1 ? 'produs' : 'produse'}
+              {productCount(quantity)}
             </AppText>
           </View>
           <Badge label={status.label} tone={status.tone} />

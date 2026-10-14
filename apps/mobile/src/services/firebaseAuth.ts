@@ -1,24 +1,18 @@
 import {
-  initializeAuth,
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  getIdToken,
   updatePassword as firebaseUpdatePassword,
   sendPasswordResetEmail,
+  updateProfile,
   type User,
   type Auth,
 } from 'firebase/auth';
-import { initializeApp, getApp, type FirebaseApp } from 'firebase/app';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { Firestore, getFirestore } from 'firebase/firestore';
-import {
-  setStoredSession,
-  getStoredSession,
-  clearStoredSession,
-  type StoredSession,
-} from './sessionStorage';
+import { clearStoredSession } from './sessionStorage';
 
 let auth: Auth | null = null;
 let app: FirebaseApp | null = null;
@@ -86,6 +80,8 @@ export const registerWithFirebase = async (
   const auth = getFirebaseAuth();
   const displayName = name || email.split('@')[0];
   const result = await createUserWithEmailAndPassword(auth, email, password);
+  // Save the name on the Firebase profile so it shows up in the app (greeting, account).
+  await updateProfile(result.user, { displayName });
   const idToken = await result.user.getIdToken(true);
 
   return {

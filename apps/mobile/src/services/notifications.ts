@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import type { DevicePushToken } from 'expo-notifications';
 
 type NotificationType =
   | 'order_confirmation'

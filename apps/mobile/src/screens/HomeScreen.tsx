@@ -45,6 +45,7 @@ import { RoofMark } from '../ui/RoofMark';
 import { isProductInStock } from '../utils/catalogFilters';
 import { departmentCover, type CategoryCover } from '../utils/categoryCover';
 import { useStableCallback } from '../utils/useStableCallback';
+import { productCount } from '../utils/string';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const logo = require('../../assets/dacus-logo.png');
@@ -403,7 +404,7 @@ const HeroCarousel = memo(function HeroCarousel({ entries, onOpen }: HeroCarouse
             key={entry.id}
             onPress={() => onOpen(entry.id, entry.name)}
             pressedScale={0.98}
-            accessibilityLabel={`${entry.name}, ${entry.count.toLocaleString('ro-RO')} produse`}
+            accessibilityLabel={`${entry.name}, ${productCount(entry.count)}`}
             style={[styles.heroCard, { width: cardWidth, height: cardHeight }]}
           >
             {entry.cover.kind === 'photo' ? (
@@ -425,7 +426,7 @@ const HeroCarousel = memo(function HeroCarousel({ entries, onOpen }: HeroCarouse
               </AppText>
               <View style={styles.heroMeta}>
                 <AppText variant="callout" tone="inverseMuted">
-                  {entry.count.toLocaleString('ro-RO')} produse
+                  {productCount(entry.count)}
                 </AppText>
                 <View style={styles.heroCta}>
                   <AppText variant="footnote" style={styles.heroCtaText}>

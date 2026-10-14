@@ -39,6 +39,7 @@ import type {
   MainTabParamList,
   RootStackParamList,
 } from './types';
+import { productCount } from '../utils/string';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
@@ -221,7 +222,7 @@ function MainTabs() {
         component={CartStackScreen}
         options={{
           title: 'Coș',
-          tabBarAccessibilityLabel: cartCount > 0 ? `Coș, ${cartCount} produse` : 'Coș',
+          tabBarAccessibilityLabel: cartCount > 0 ? `Coș, ${productCount(cartCount)}` : 'Coș',
         }}
       />
       <Tabs.Screen

@@ -24,7 +24,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [

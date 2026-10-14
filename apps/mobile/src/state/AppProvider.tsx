@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Alert, Linking, Platform, Share } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { Alert, AppState as RNAppState, Linking, Platform, Share } from 'react-native';
 
 import type { CatalogCategory, CatalogProduct } from '../data/catalog';
 import { buildDepartments } from '../data/departments';
@@ -57,6 +58,7 @@ import { initFirebase } from '../services/firebaseAuth';
 import {
   getAppPreferences,
   getGuestCart,
+  getOrCreateDeviceId,
   updateAppPreferences,
   updateGuestCart,
   type AppPreferences,
@@ -64,6 +66,7 @@ import {
 import { haptics } from '../ui/haptics';
 import { useToast } from '../ui/Toast';
 import { formatPrice } from '../utils/catalogFilters';
+import { checkCheckoutOutcome } from '../utils/checkoutStatus';
 import { isBroadCategoryName } from '../utils/string';
 import { useStableCallback } from '../utils/useStableCallback';
 import { describeFilters, SEARCH_DEFAULT_FILTERS, type ProductListFilters } from './productListFilters';
@@ -205,7 +208,7 @@ function useAppState() {
   const [appPreferences, setAppPreferencesState] = useState<AppPreferences | null>(null);
   const [backInStockSubscriptions, setBackInStockSubscriptions] = useState<Set<string>>(() => new Set());
   const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([]);
-  const [deviceId] = useState(() => `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  const [deviceId, setDeviceId] = useState(() => `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
   const [shouldPromptBiometricAfterAuth, setShouldPromptBiometricAfterAuth] = useState(false);
   const [serverAccountSettings, setServerAccountSettings] = useState<AccountSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -406,6 +409,12 @@ function useAppState() {
 
   const findLine = (productId: string, variantId?: string) =>
     cart.find((line) => lineKey(line.productId, line.variantId) === lineKey(productId, variantId));
+
+  // One id per install, so the account's device list and push registration don't grow on every launch.
+  useEffect(() => {
+    void getOrCreateDeviceId(deviceId).then(setDeviceId).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     void getGuestCart()
@@ -1067,8 +1076,43 @@ function useAppState() {
     showToast(message, 'error');
   };
 
-  const openCheckoutUrl = (url: string) =>
-    Linking.openURL(url).catch(() => showToast('Nu am putut deschide pagina de plată.', 'error'));
+  // Payment happens on the store's checkout page, opened inside the app (Safari view / Chrome custom tab).
+  const openCheckoutUrl = async (url: string) => {
+    try {
+      return await WebBrowser.openBrowserAsync(url, { controlsColor: '#D20A11', dismissButtonStyle: 'close' });
+    } catch {
+      return Linking.openURL(url)
+        .then(() => null)
+        .catch(() => {
+          showToast('Nu am putut deschide pagina de plată.', 'error');
+          return null;
+        });
+    }
+  };
+
+  // A guest's cart is emptied only once Shopify has turned the checkout into an order. Checked when the
+  // checkout page closes (iOS) or when the app comes back to the foreground (Android custom tabs).
+  const pendingGuestCheckoutRef = useRef<string | null>(null);
+  const settleGuestCheckout = useStableCallback(async () => {
+    const url = pendingGuestCheckoutRef.current;
+    if (!url) return;
+    pendingGuestCheckoutRef.current = null;
+    const outcome = await checkCheckoutOutcome(url);
+    if (outcome === 'completed') {
+      setCart([]);
+      void updateGuestCart([]).catch(() => undefined);
+      showToast('Comanda a fost plasată. Mulțumim!');
+      goHome();
+    } else if (outcome === 'open') {
+      showToast('Plata nu a fost finalizată. Produsele au rămas în coș.', 'info');
+    }
+  });
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener('change', (state) => {
+      if (state === 'active') void settleGuestCheckout();
+    });
+    return () => subscription.remove();
+  }, [settleGuestCheckout]);
 
   const processCheckout = useStableCallback(async () => {
     const validCartItems = cart.filter((item) => productsById.has(item.productId));
@@ -1093,11 +1137,10 @@ function useAppState() {
         }
         setCart(validation.lines);
         const payload = await checkoutCartGuest({ lines: validation.lines, address: undefined, deviceId });
-        setCart([]);
-        void updateGuestCart([]).catch(() => undefined);
-        showToast(`Continuă plata de ${formatPrice(payload.totalRon)} în pagina securizată.`);
-        await openCheckoutUrl(payload.checkoutUrl);
-        goHome();
+        pendingGuestCheckoutRef.current = payload.checkoutUrl;
+        const result = await openCheckoutUrl(payload.checkoutUrl);
+        // iOS resolves when the page is closed; Android resolves at once and settles on return to the app.
+        if (result && result.type !== 'opened') await settleGuestCheckout();
         return;
       }
 

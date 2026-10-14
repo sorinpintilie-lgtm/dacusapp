@@ -38,6 +38,7 @@
     "expo-notifications": "~57.0.22",
     "expo-splash-screen": "~57.0.10",
     "expo-task-manager": "~57.0.21",
+    "expo-web-browser": "~57.0.3",
     "firebase": "^11.0.0",
     "qrcode": "^1.5.4",
     "react": "19.2.3",

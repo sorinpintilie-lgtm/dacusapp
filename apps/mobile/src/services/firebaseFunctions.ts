@@ -1,4 +1,4 @@
-import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getFunctions, Functions, httpsCallable } from 'firebase/functions';
 
 const firebaseConfig = {
