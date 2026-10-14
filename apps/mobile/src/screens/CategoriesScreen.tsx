@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
@@ -11,7 +10,16 @@ import type { CatalogCategory } from '../data/catalog';
 import type { CategoriesStackParamList } from '../navigation/types';
 import { useApp } from '../state/AppProvider';
 import { colors, continuous, radii, spacing } from '../theme/tokens';
-import { AppText, EmptyState, enterUp, hasImageUrl, SearchField, sizedImageUrl, Touchable } from '../ui';
+import {
+  AppText,
+  EmptyState,
+  enterUp,
+  ProductImage,
+  SearchField,
+  sizedImageUrl,
+  Touchable,
+} from '../ui';
+import { categoryCover, type CategoryCover } from '../utils/categoryCover';
 import { foldForSearch } from '../utils/search';
 
 const GAP = spacing.sm;
@@ -23,7 +31,11 @@ const toRows = (categories: CatalogCategory[]): Row[] => {
   const rows: Row[] = [];
   let index = 0;
   if (categories.length > 0) {
-    rows.push({ key: `row-${categories[0]?.id}`, items: [categories[0] as CatalogCategory], featured: true });
+    rows.push({
+      key: `row-${categories[0]?.id}`,
+      items: [categories[0] as CatalogCategory],
+      featured: true,
+    });
     index = 1;
   }
   for (; index < categories.length; index += 2) {
@@ -35,7 +47,7 @@ const toRows = (categories: CatalogCategory[]): Row[] => {
 
 export function CategoriesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<CategoriesStackParamList>>();
-  const { orderedCategories, countByCategory, trackCategoryView } = useApp();
+  const { orderedCategories, countByCategory, productsByCategory, trackCategoryView } = useApp();
   const { width } = useWindowDimensions();
   const [filter, setFilter] = useState('');
   const listRef = useRef<FlatList<Row>>(null);
@@ -47,7 +59,9 @@ export function CategoriesScreen() {
   const rows = useMemo(() => {
     const needle = foldForSearch(filter);
     const matches = needle
-      ? orderedCategories.filter((category) => ` ${foldForSearch(category.name)}`.includes(` ${needle}`))
+      ? orderedCategories.filter((category) =>
+          ` ${foldForSearch(category.name)}`.includes(` ${needle}`),
+        )
       : orderedCategories;
     // While filtering, every match gets the same size.
     return needle ? pairs(matches) : toRows(matches);
@@ -64,6 +78,7 @@ export function CategoriesScreen() {
         <CategoryTile
           key={category.id}
           category={category}
+          cover={categoryCover(category, productsByCategory.get(category.id))}
           count={countByCategory.get(category.id) ?? 0}
           width={item.featured ? contentWidth : halfWidth}
           height={item.featured ? Math.round(contentWidth * 0.5) : Math.round(halfWidth * 1.08)}
@@ -98,7 +113,13 @@ export function CategoriesScreen() {
           style={styles.filter}
         />
       }
-      ListEmptyComponent={<EmptyState icon="grid-outline" title="Nicio categorie găsită" message="Încearcă alt cuvânt." />}
+      ListEmptyComponent={
+        <EmptyState
+          icon="grid-outline"
+          title="Nicio categorie găsită"
+          message="Încearcă alt cuvânt."
+        />
+      }
     />
   );
 }
@@ -114,6 +135,7 @@ const pairs = (categories: CatalogCategory[]): Row[] => {
 
 type CategoryTileProps = {
   category: CatalogCategory;
+  cover: CategoryCover;
   count: number;
   width: number;
   height: number;
@@ -121,38 +143,59 @@ type CategoryTileProps = {
   onPress: () => void;
 };
 
-function CategoryTile({ category, count, width, height, featured, onPress }: CategoryTileProps) {
+function CategoryTile({
+  category,
+  cover,
+  count,
+  width,
+  height,
+  featured,
+  onPress,
+}: CategoryTileProps) {
   const countLabel = `${count.toLocaleString('ro-RO')} produse`;
+  const photo = cover.kind === 'photo';
+
   return (
     <Touchable
       onPress={onPress}
       pressedScale={0.97}
-      style={[styles.tile, { width, height }]}
+      style={[styles.tile, photo ? styles.tilePhoto : styles.tileProduct, { width, height }]}
       accessibilityLabel={`${category.name}, ${countLabel}`}
     >
-      {hasImageUrl(category.imageUrl) ? (
-        <Image
-          source={sizedImageUrl(category.imageUrl, width)}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={200}
-          recyclingKey={category.id}
-        />
+      {photo ? (
+        <>
+          <Image
+            source={sizedImageUrl(cover.uri, width)}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            transition={200}
+          />
+          <LinearGradient
+            colors={['rgba(12,11,10,0)', 'rgba(12,11,10,0.72)']}
+            locations={[0.35, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </>
       ) : (
-        <View style={styles.noImage}>
-          <Ionicons name="grid-outline" size={28} color={colors.textInverseMuted} />
+        // No collection photo: a product from the category, shown whole on the light well, with dark text.
+        <View style={styles.productCover}>
+          <View style={styles.productBlend}>
+            <ProductImage
+              uri={cover.kind === 'product' ? sizedImageUrl(cover.uri, width) : undefined}
+              iconSize={30}
+            />
+          </View>
         </View>
       )}
-      <LinearGradient
-        colors={['rgba(12,11,10,0)', 'rgba(12,11,10,0.72)']}
-        locations={[0.35, 1]}
-        style={StyleSheet.absoluteFill}
-      />
       <View style={styles.tileText}>
-        <AppText variant={featured ? 'title1' : 'headline'} tone="inverse" numberOfLines={2}>
+        <AppText
+          variant={featured ? 'title1' : 'headline'}
+          tone={photo ? 'inverse' : 'primary'}
+          numberOfLines={2}
+        >
           {category.name}
         </AppText>
-        <AppText variant="footnote" tone="inverseMuted">
+        <AppText variant="footnote" tone={photo ? 'inverseMuted' : 'secondary'}>
           {countLabel}
         </AppText>
       </View>
@@ -168,9 +211,21 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     ...continuous,
     overflow: 'hidden',
-    backgroundColor: colors.charcoal,
     justifyContent: 'flex-end',
+    isolation: 'isolate',
   },
-  noImage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  // Dark under photos (they end up under a dark scrim anyway), light for product covers.
+  tilePhoto: { backgroundColor: colors.charcoal },
+  tileProduct: { backgroundColor: colors.well },
+  productCover: {
+    ...StyleSheet.absoluteFill,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 64,
+    // The photo multiplies onto its direct parent, so the grey lives here (white backgrounds disappear).
+    backgroundColor: colors.well,
+    isolation: 'isolate',
+  },
+  productBlend: { flex: 1, mixBlendMode: 'multiply' },
   tileText: { padding: spacing.sm, gap: 2 },
 });

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -10,6 +9,7 @@ import { Badge } from './Badge';
 import { sizedImageUrl } from './images';
 import { discountPercent, PriceTag } from './PriceTag';
 import { AddToCartButton, HeartButton } from './ProductActions';
+import { ProductImage } from './ProductImage';
 import { Touchable } from './Touchable';
 
 export const hasImageUrl = (value: string | undefined): value is string => !!value && /^https?:\/\//.test(value);
@@ -63,19 +63,9 @@ function ProductCardComponent({
         style={styles.pressable}
       >
         <View style={[styles.well, { height: width }]}>
-          {hasImageUrl(imageUrl) ? (
-            <View style={[styles.blend, !inStock && styles.muted]}>
-              <Image
-                source={sizedImageUrl(imageUrl, width)}
-                style={styles.image}
-                contentFit="contain"
-                transition={180}
-                recyclingKey={product.id}
-              />
-            </View>
-          ) : (
-            <Ionicons name="image-outline" size={30} color={colors.textTertiary} />
-          )}
+          <View style={[styles.blend, !inStock && styles.muted]}>
+            <ProductImage uri={hasImageUrl(imageUrl) ? sizedImageUrl(imageUrl, width) : undefined} iconSize={30} />
+          </View>
           {discount > 0 ? <Badge label={`-${discount}%`} tone="brand" style={styles.discount} /> : null}
           {!inStock ? <Badge label="Stoc epuizat" tone="neutral" style={styles.soldOut} /> : null}
         </View>
@@ -141,7 +131,6 @@ const styles = StyleSheet.create({
   // Product shots are mostly on white; multiplying them onto the grey well removes the white box.
   blend: { width: '100%', height: '100%', padding: spacing.sm, mixBlendMode: 'multiply' },
   muted: { opacity: 0.45 },
-  image: { width: '100%', height: '100%' },
   discount: { position: 'absolute', top: CORNER_INSET, left: CORNER_INSET },
   soldOut: { position: 'absolute', bottom: CORNER_INSET, left: CORNER_INSET },
   body: { gap: 3, paddingHorizontal: 2 },

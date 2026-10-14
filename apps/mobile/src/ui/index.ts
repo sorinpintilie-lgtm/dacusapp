@@ -12,6 +12,7 @@ export { durations, enterUp, fadeIn, fadeOut, listLayout, springs } from './moti
 export { discountPercent, PriceTag } from './PriceTag';
 export { AddToCartButton, HeartButton } from './ProductActions';
 export { displayBrand, hasImageUrl, ProductCard } from './ProductCard';
+export { ProductImage } from './ProductImage';
 export { ProductRail, RAIL_CARD_WIDTH } from './ProductRail';
 export { ProductRow } from './ProductRow';
 export { QuantityStepper } from './QuantityStepper';

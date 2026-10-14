@@ -23,7 +23,8 @@
     "export:catalog:snapshot": "node scripts/export-firestore-catalog-snapshot.mjs",
     "build:catalog:mobile": "node scripts/build-mobile-catalog.mjs",
     "format": "prettier . --write",
-    "format:check": "prettier . --check"
+    "format:check": "prettier . --check",
+    "refresh:catalog:mobile": "node scripts/refresh-mobile-catalog.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

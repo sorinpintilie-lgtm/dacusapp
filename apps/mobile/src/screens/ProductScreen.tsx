@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
-import { Image } from 'expo-image';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, {
@@ -31,6 +30,7 @@ import {
   PriceTag,
   ProductRail,
   SectionHeader,
+  ProductImage,
   StockLine,
   Touchable,
   useToast,
@@ -191,13 +191,9 @@ export function ProductScreen() {
             accessibilityLabel="Mărește imaginea"
             style={[styles.mediaPress, { paddingTop: insets.top + 48 }]}
           >
-            {hasImageUrl(imageUrl) ? (
-              <View style={styles.blend}>
-                <Image source={imageUrl} placeholder={product.thumbnailUrl} style={styles.image} contentFit="contain" transition={220} />
-              </View>
-            ) : (
-              <Ionicons name="image-outline" size={56} color={colors.textTertiary} />
-            )}
+            <View style={styles.blend}>
+              <ProductImage uri={imageUrl} placeholderUri={product.thumbnailUrl} iconSize={56} />
+            </View>
           </Touchable>
         </Animated.View>
 
@@ -413,7 +409,6 @@ const styles = StyleSheet.create({
     isolation: 'isolate',
   },
   blend: { width: '100%', height: '100%', mixBlendMode: 'multiply' },
-  image: { width: '100%', height: '100%' },
   body: {
     marginTop: -spacing.xl,
     borderTopLeftRadius: radii.xl,

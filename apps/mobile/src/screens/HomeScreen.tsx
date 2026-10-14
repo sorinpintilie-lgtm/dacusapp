@@ -4,7 +4,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useMemo } from 'react';
-import { FlatList, ScrollView, StyleSheet, View, useWindowDimensions, type ListRenderItem } from 'react-native';
+import {
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type ListRenderItem,
+} from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -27,6 +34,7 @@ import {
   enterUp,
   hasImageUrl,
   IconButton,
+  ProductImage,
   ProductRail,
   SearchTrigger,
   SectionHeader,
@@ -35,6 +43,7 @@ import {
 } from '../ui';
 import { RoofMark } from '../ui/RoofMark';
 import { isProductInStock } from '../utils/catalogFilters';
+import { categoryCover } from '../utils/categoryCover';
 import { useStableCallback } from '../utils/useStableCallback';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -42,6 +51,7 @@ const logo = require('../../assets/dacus-logo.png');
 
 const SHELF_LIMIT = 12;
 const HERO_COUNT = 4;
+const SHORTCUT_COUNT = 12;
 const BRAND_ROW_HEIGHT = 44;
 const SEARCH_HEIGHT = 46;
 const HEADER_GAP = spacing.xs;
@@ -61,7 +71,8 @@ type HomeRow =
 const showcase = (items: CatalogProduct[], limit: number) => {
   const picked: CatalogProduct[] = [];
   for (const item of items) {
-    if (isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl)) picked.push(item);
+    if (isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl))
+      picked.push(item);
     if (picked.length >= limit) break;
   }
   return picked;
@@ -69,10 +80,15 @@ const showcase = (items: CatalogProduct[], limit: number) => {
 
 /** An even spread over the whole catalog, so recommendations aren't all from the first category. */
 const spread = (items: CatalogProduct[], limit: number) => {
-  const pool = items.filter((item) => isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl));
+  const pool = items.filter(
+    (item) => isProductInStock(item) && hasImageUrl(item.thumbnailUrl ?? item.imageUrl),
+  );
   if (pool.length <= limit) return pool;
   const step = pool.length / limit;
-  return Array.from({ length: limit }, (_, index) => pool[Math.floor(index * step + step / 2)] as CatalogProduct);
+  return Array.from(
+    { length: limit },
+    (_, index) => pool[Math.floor(index * step + step / 2)] as CatalogProduct,
+  );
 };
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<HomeRow>);
@@ -86,6 +102,7 @@ export function HomeScreen() {
     products,
     featuredCategories,
     orderedCategories,
+    productsByCategory,
     homeSections,
     countByCategory,
     continueBrowsingProducts,
@@ -113,12 +130,16 @@ export function HomeScreen() {
   });
 
   const rows = useMemo<HomeRow[]>(() => {
-    const deals = products.filter((item) => (item.oldPriceRon ?? 0) > item.priceRon && isProductInStock(item));
+    const deals = products.filter(
+      (item) => (item.oldPriceRon ?? 0) > item.priceRon && isProductInStock(item),
+    );
     return [
       { type: 'hero', key: 'hero' },
       { type: 'categories', key: 'categories' },
       ...(continueBrowsingProducts.length > 0 ? [{ type: 'recent' as const, key: 'recent' }] : []),
-      ...(deals.length >= 3 ? [{ type: 'deals' as const, key: 'deals', products: deals.slice(0, SHELF_LIMIT) }] : []),
+      ...(deals.length >= 3
+        ? [{ type: 'deals' as const, key: 'deals', products: deals.slice(0, SHELF_LIMIT) }]
+        : []),
       { type: 'loyalty', key: 'loyalty' },
       { type: 'recommended', key: 'recommended', products: spread(products, SHELF_LIMIT) },
       ...homeSections.map((section) => ({
@@ -146,7 +167,9 @@ export function HomeScreen() {
       case 'hero':
         content = (
           <HeroCarousel
-            categories={featuredCategories.slice(0, HERO_COUNT)}
+            categories={featuredCategories
+              .filter((category) => hasImageUrl(category.imageUrl))
+              .slice(0, HERO_COUNT)}
             countByCategory={countByCategory}
             onOpen={openCategory}
           />
@@ -160,7 +183,11 @@ export function HomeScreen() {
               onAction={() => rootNavigation.navigate('MainTabs', { screen: 'CategoriesTab' })}
               style={styles.gutter}
             />
-            <CategoryShortcuts categories={orderedCategories} onOpen={openCategory} />
+            <CategoryShortcuts
+              categories={orderedCategories}
+              productsByCategory={productsByCategory}
+              onOpen={openCategory}
+            />
           </View>
         );
         break;
@@ -175,7 +202,11 @@ export function HomeScreen() {
       case 'deals':
         content = (
           <View style={styles.block}>
-            <SectionHeader title="Reduceri" subtitle="Prețuri mai mici, cât sunt pe stoc" style={styles.gutter} />
+            <SectionHeader
+              title="Reduceri"
+              subtitle="Prețuri mai mici, cât sunt pe stoc"
+              style={styles.gutter}
+            />
             {rail(item.products)}
           </View>
         );
@@ -187,7 +218,9 @@ export function HomeScreen() {
             points={loyalty.points}
             tier={loyalty.tier}
             onPress={() =>
-              accountUser ? rootNavigation.navigate('MainTabs', { screen: 'LoyaltyTab' }) : rootNavigation.navigate('Login')
+              accountUser
+                ? rootNavigation.navigate('MainTabs', { screen: 'LoyaltyTab' })
+                : rootNavigation.navigate('Login')
             }
           />
         );
@@ -195,7 +228,7 @@ export function HomeScreen() {
       case 'recommended':
         content = (
           <View style={styles.block}>
-            <SectionHeader title="Recomandate pentru tine" style={styles.gutter} />
+            <SectionHeader title="Recomandate" style={styles.gutter} />
             {rail(item.products)}
           </View>
         );
@@ -216,7 +249,8 @@ export function HomeScreen() {
     return <Animated.View entering={enterUp(index)}>{content}</Animated.View>;
   };
 
-  const headerHeight = insets.top + spacing.xs + BRAND_ROW_HEIGHT + HEADER_GAP + SEARCH_HEIGHT + spacing.sm;
+  const headerHeight =
+    insets.top + spacing.xs + BRAND_ROW_HEIGHT + HEADER_GAP + SEARCH_HEIGHT + spacing.sm;
 
   return (
     <View style={styles.screen}>
@@ -255,22 +289,44 @@ type HomeHeaderProps = {
 function HomeHeader({ scrollY, topInset, unread, onSearch, onInbox }: HomeHeaderProps) {
   const slideStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: -interpolate(scrollY.value, [0, COLLAPSE_DISTANCE], [0, COLLAPSE_DISTANCE], Extrapolation.CLAMP) },
+      {
+        translateY: -interpolate(
+          scrollY.value,
+          [0, COLLAPSE_DISTANCE],
+          [0, COLLAPSE_DISTANCE],
+          Extrapolation.CLAMP,
+        ),
+      },
     ],
   }));
   const brandStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [0, COLLAPSE_DISTANCE * 0.7], [1, 0], Extrapolation.CLAMP),
   }));
   const dividerStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [COLLAPSE_DISTANCE, COLLAPSE_DISTANCE + 24], [0, 1], Extrapolation.CLAMP),
+    opacity: interpolate(
+      scrollY.value,
+      [COLLAPSE_DISTANCE, COLLAPSE_DISTANCE + 24],
+      [0, 1],
+      Extrapolation.CLAMP,
+    ),
   }));
 
   return (
     <View style={styles.headerHost} pointerEvents="box-none">
       <Animated.View style={[styles.header, { paddingTop: topInset + spacing.xs }, slideStyle]}>
         <Animated.View style={[styles.brandRow, brandStyle]}>
-          <Image source={logo} style={styles.logo} contentFit="contain" accessibilityLabel="Dacus" />
-          <IconButton icon="notifications-outline" accessibilityLabel="Notificări" onPress={onInbox} badge={unread} />
+          <Image
+            source={logo}
+            style={styles.logo}
+            contentFit="contain"
+            accessibilityLabel="Dacus"
+          />
+          <IconButton
+            icon="notifications-outline"
+            accessibilityLabel="Notificări"
+            onPress={onInbox}
+            badge={unread}
+          />
         </Animated.View>
         <SearchTrigger placeholder="Caută produse, branduri, coduri" onPress={onSearch} />
         <Animated.View style={[styles.divider, dividerStyle]} />
@@ -287,7 +343,11 @@ type HeroCarouselProps = {
   onOpen: (category: CatalogCategory) => void;
 };
 
-const HeroCarousel = memo(function HeroCarousel({ categories, countByCategory, onOpen }: HeroCarouselProps) {
+const HeroCarousel = memo(function HeroCarousel({
+  categories,
+  countByCategory,
+  onOpen,
+}: HeroCarouselProps) {
   const { width } = useWindowDimensions();
   const cardWidth = Math.min(width, 640) - spacing.md * 2;
   const cardHeight = Math.round(cardWidth * 0.58);
@@ -360,7 +420,15 @@ const HeroCarousel = memo(function HeroCarousel({ categories, countByCategory, o
   );
 });
 
-function PagerDot({ index, step, scrollX }: { index: number; step: number; scrollX: SharedValue<number> }) {
+function PagerDot({
+  index,
+  step,
+  scrollX,
+}: {
+  index: number;
+  step: number;
+  scrollX: SharedValue<number>;
+}) {
   // The current page's dot stretches into a bar; neighbours shrink back as you swipe.
   const style = useAnimatedStyle(() => {
     const distance = Math.abs(scrollX.value / step - index);
@@ -373,39 +441,64 @@ function PagerDot({ index, step, scrollX }: { index: number; step: number; scrol
   return <Animated.View style={[styles.dot, style]} />;
 }
 
-function CategoryShortcuts({ categories, onOpen }: { categories: CatalogCategory[]; onOpen: (category: CatalogCategory) => void }) {
-  // Two rows that scroll together, so every category is one swipe away.
+type CategoryShortcutsProps = {
+  categories: CatalogCategory[];
+  productsByCategory: Map<string, CatalogProduct[]>;
+  onOpen: (category: CatalogCategory) => void;
+};
+
+function CategoryShortcuts({ categories, productsByCategory, onOpen }: CategoryShortcutsProps) {
+  // The biggest categories in two rows that scroll together; "Vezi tot" opens the full list.
   const columns = useMemo(() => {
+    const top = categories.slice(0, SHORTCUT_COUNT);
     const result: CatalogCategory[][] = [];
-    for (let index = 0; index < categories.length; index += 2) {
-      result.push(categories.slice(index, index + 2));
+    for (let index = 0; index < top.length; index += 2) {
+      result.push(top.slice(index, index + 2));
     }
     return result;
   }, [categories]);
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.shortcuts}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.shortcuts}
+    >
       {columns.map((column) => (
         <View key={column[0]?.id} style={styles.shortcutColumn}>
-          {column.map((category) => (
-            <Touchable
-              key={category.id}
-              onPress={() => onOpen(category)}
-              pressedScale={0.95}
-              haptic="selection"
-              accessibilityLabel={category.name}
-              style={styles.shortcut}
-            >
-              <View style={styles.shortcutThumb}>
-                {hasImageUrl(category.imageUrl) ? (
-                  <Image source={sizedImageUrl(category.imageUrl, 36)} style={styles.shortcutImage} contentFit="cover" />
-                ) : null}
-              </View>
-              <AppText variant="subheadMedium" numberOfLines={1} style={styles.shortcutLabel}>
-                {category.name}
-              </AppText>
-            </Touchable>
-          ))}
+          {column.map((category) => {
+            const cover = categoryCover(category, productsByCategory.get(category.id));
+            return (
+              <Touchable
+                key={category.id}
+                onPress={() => onOpen(category)}
+                pressedScale={0.95}
+                haptic="selection"
+                accessibilityLabel={category.name}
+                style={styles.shortcut}
+              >
+                <View style={styles.shortcutThumb}>
+                  {cover.kind === 'photo' ? (
+                    <Image
+                      source={sizedImageUrl(cover.uri, 36)}
+                      style={styles.shortcutImage}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={styles.shortcutBlend}>
+                      <ProductImage
+                        uri={cover.kind === 'product' ? sizedImageUrl(cover.uri, 36) : undefined}
+                        iconSize={16}
+                      />
+                    </View>
+                  )}
+                </View>
+                <AppText variant="subheadMedium" numberOfLines={1} style={styles.shortcutLabel}>
+                  {category.name}
+                </AppText>
+              </Touchable>
+            );
+          })}
         </View>
       ))}
     </ScrollView>
@@ -422,7 +515,12 @@ type LoyaltyBannerProps = {
 function LoyaltyBanner({ signedIn, points, tier, onPress }: LoyaltyBannerProps) {
   return (
     <View style={styles.gutter}>
-      <Touchable onPress={onPress} pressedScale={0.98} style={styles.loyalty} accessibilityLabel="Program de fidelitate">
+      <Touchable
+        onPress={onPress}
+        pressedScale={0.98}
+        style={styles.loyalty}
+        accessibilityLabel="Program de fidelitate"
+      >
         <View style={styles.loyaltyMark} pointerEvents="none">
           <RoofMark width={150} color={colors.brand} strokeWidth={8} />
         </View>
@@ -434,7 +532,9 @@ function LoyaltyBanner({ signedIn, points, tier, onPress }: LoyaltyBannerProps) 
             {signedIn ? `${points.toLocaleString('ro-RO')} puncte` : 'Puncte la fiecare comandă'}
           </AppText>
           <AppText variant="subhead" tone="inverseMuted">
-            {signedIn ? '100 de puncte înseamnă 5 RON reducere.' : '1 punct pentru fiecare leu. 100 de puncte = 5 RON.'}
+            {signedIn
+              ? '100 de puncte înseamnă 5 RON reducere.'
+              : '1 punct pentru fiecare leu. 100 de puncte = 5 RON.'}
           </AppText>
         </View>
         {/* Looks like a button; the whole card is the tap target. */}
@@ -462,9 +562,21 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: HEADER_GAP,
   },
-  brandRow: { height: BRAND_ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brandRow: {
+    height: BRAND_ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   logo: { width: 112, height: 36 },
-  divider: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.line },
+  divider: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.line,
+  },
   statusCover: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.canvas },
 
   heroBlock: { gap: spacing.sm },
@@ -477,7 +589,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   heroText: { padding: spacing.lg, gap: spacing.xs },
-  heroMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  heroMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   heroCta: {
     height: 34,
     paddingHorizontal: 14,
@@ -510,8 +627,10 @@ const styles = StyleSheet.create({
     ...continuous,
     overflow: 'hidden',
     backgroundColor: colors.wellStrong,
+    isolation: 'isolate',
   },
   shortcutImage: { width: '100%', height: '100%' },
+  shortcutBlend: { flex: 1, padding: 3, mixBlendMode: 'multiply' },
   shortcutLabel: { flexShrink: 1 },
 
   loyalty: {

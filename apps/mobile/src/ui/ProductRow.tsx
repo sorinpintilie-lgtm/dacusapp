@@ -1,5 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { memo, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -8,6 +6,7 @@ import { colors, continuous, fonts, radii, spacing } from '../theme/tokens';
 import { sizedImageUrl } from './images';
 import { PriceTag } from './PriceTag';
 import { hasImageUrl } from './ProductCard';
+import { ProductImage } from './ProductImage';
 import { Touchable } from './Touchable';
 
 type ProductRowProps = {
@@ -44,19 +43,9 @@ function ProductRowComponent({
   const details = (
     <>
       <View style={[styles.thumb, { width: thumbSize, height: thumbSize }]}>
-        {hasImageUrl(imageUrl) ? (
-          <View style={styles.blend}>
-            <Image
-              source={sizedImageUrl(imageUrl, thumbSize)}
-              style={styles.image}
-              contentFit="contain"
-              transition={150}
-              recyclingKey={product.id}
-            />
-          </View>
-        ) : (
-          <Ionicons name="image-outline" size={22} color={colors.textTertiary} />
-        )}
+        <View style={styles.blend}>
+          <ProductImage uri={hasImageUrl(imageUrl) ? sizedImageUrl(imageUrl, thumbSize) : undefined} iconSize={22} />
+        </View>
       </View>
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={2}>
@@ -112,7 +101,6 @@ const styles = StyleSheet.create({
     isolation: 'isolate',
   },
   blend: { width: '100%', height: '100%', padding: 6, mixBlendMode: 'multiply' },
-  image: { width: '100%', height: '100%' },
   info: { flex: 1, gap: 3 },
   name: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 19, color: colors.textPrimary },
   meta: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 17, color: colors.textSecondary },
