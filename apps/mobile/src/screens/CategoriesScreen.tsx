@@ -171,6 +171,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.charcoal,
     justifyContent: 'flex-end',
   },
-  noImage: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  noImage: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   tileText: { padding: spacing.sm, gap: 2 },
 });

@@ -82,7 +82,7 @@ export function Sheet({ visible, onClose, title, children, footer }: SheetProps)
 }
 
 const styles = StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.scrim },
   sheet: {
     position: 'absolute',
     left: 0,

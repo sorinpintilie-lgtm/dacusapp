@@ -14,15 +14,22 @@
           "sounds": []
         }
       ],
-      "expo-background-fetch"
+      "expo-background-fetch",
+      "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
     ],
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "googleServicesFile": "../../GoogleService-Info.plist",
@@ -34,13 +41,21 @@
         "NSLocationWhenInUseUsageDescription": "Dacus folosește locația pentru a găsi magazinele apropiate.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Dacus folosește locația pentru a trimite notificări despre oferte apropiate.",
         "NSFaceIDUsageDescription": "Dacus folosește Face ID pentru autentificare rapidă și sigură.",
-        "UIBackgroundModes": ["remote-notification", "processing"],
-        "BGTaskSchedulerPermittedIdentifiers": ["com.expo.modules.backgroundtask.processing"],
+        "UIBackgroundModes": [
+          "remote-notification",
+          "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.expo.modules.backgroundtask.processing"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleURLTypes": [
           {
             "CFBundleTypeRole": "Editor",
-            "CFBundleURLSchemes": ["ro.dacus.mobile", "dacus"]
+            "CFBundleURLSchemes": [
+              "ro.dacus.mobile",
+              "dacus"
+            ]
           }
         ]
       }
