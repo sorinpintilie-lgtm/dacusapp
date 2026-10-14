@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: 'Barlow'; font-weight: 500; src: url('assets/fonts/Barlow_500Medium.ttf') format('truetype'); }
+      @font-face { font-family: 'Barlow'; font-weight: 600; src: url('assets/fonts/Barlow_600SemiBold.ttf') format('truetype'); }
+      @font-face { font-family: 'Barlow'; font-weight: 700; src: url('assets/fonts/Barlow_700Bold.ttf') format('truetype'); }
+      @font-face { font-family: 'Barlow'; font-weight: 800; src: url('assets/fonts/Barlow_800ExtraBold.ttf') format('truetype'); }
+      @font-face { font-family: 'Barlow'; font-weight: 900; src: url('assets/fonts/Barlow_900Black.ttf') format('truetype'); }
+      @font-face { font-family: 'Barlow'; font-weight: 900; font-style: italic; src: url('assets/fonts/Barlow_900Black_Italic.ttf') format('truetype'); }
+      :root { --red: #d20a11; --ink: #141414; --paper: #f5f5f7; --muted: #8a8a8f; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #000; font-family: 'Barlow', sans-serif; color: var(--ink); }
+      #cam { position: absolute; inset: 0; }
+      .scene { position: absolute; inset: 0; overflow: hidden; }
+      /* Stacking: each transition needs the outgoing scene on top (slats open onto the cart, the cart irises onto loyalty). */
+      #s1 { z-index: 1; } #s2 { z-index: 2; } #s3 { z-index: 3; } #s6 { z-index: 4; } #s5 { z-index: 5; } #s4 { z-index: 6; } #s7 { z-index: 7; }
+      .full { position: absolute; inset: 0; }
+      .center { display: flex; align-items: center; justify-content: center; }
+      .m { display: inline-block; overflow: hidden; vertical-align: top; padding: 0.12em 0.04em 0.16em; margin: -0.12em -0.04em -0.16em; }
+      .w { display: inline-block; }
+      .hidden { visibility: hidden; }
+
+      /* S1 cold open */
+      #s1 { background: #000; }
+      #roofline { position: absolute; left: 660px; top: 370px; width: 600px; height: 340px; overflow: visible; }
+      .hit { font-weight: 900; letter-spacing: -0.04em; line-height: 0.9; text-transform: uppercase; }
+      #hit-tot { background: #000; color: #fff; font-size: 520px; }
+      #hit-pentru { background: var(--red); color: #fff; font-size: 400px; font-style: italic; }
+      #hit-casa { background: #fff; color: var(--ink); font-size: 460px; }
+      #hit-casa b { color: var(--red); }
+      .strobe { background-size: cover; background-position: center; }
+      .strobe::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 100%); }
+      .strobe span {
+        position: absolute; left: 110px; bottom: 90px; z-index: 1;
+        color: #fff; font-weight: 900; font-style: italic; text-transform: uppercase;
+        font-size: 150px; letter-spacing: -0.03em; line-height: 0.9;
+      }
+      .strobe span::after { content: ''; display: block; width: 140px; height: 16px; margin-top: 18px; background: var(--red); }
+
+      /* S2 product storm */
+      #s2 { background: radial-gradient(ellipse at 50% 50%, #ffffff 0%, #ececf0 100%); }
+      .tunnel { position: absolute; inset: 0; perspective: 1300px; }
+      .space { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transform-style: preserve-3d; }
+      .pcard {
+        position: absolute; width: 280px; height: 280px; margin: -140px 0 0 -140px;
+        background: #fff; border-radius: 40px; overflow: hidden;
+        box-shadow: 0 40px 80px -30px rgba(20, 20, 20, 0.35);
+      }
+      .pcard img { width: 100%; height: 100%; object-fit: contain; padding: 22px; display: block; }
+      #count-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+      #count-big { font-size: 300px; font-weight: 900; letter-spacing: -0.05em; line-height: 0.9; font-variant-numeric: tabular-nums; }
+      #count-big i { font-style: normal; color: var(--red); }
+      #count-sub { font-size: 110px; font-weight: 800; letter-spacing: -0.03em; margin-top: 10px; }
+      #zoom-card { position: absolute; left: 50%; top: 50%; width: 300px; height: 300px; margin: -150px 0 0 -150px; background: #fff; border-radius: 40px; overflow: hidden; }
+      #zoom-card img { width: 100%; height: 100%; object-fit: contain; padding: 22px; }
+
+      /* S3 search */
+      #s3 { background: var(--ink); }
+      #s3-content { position: absolute; inset: 0; }
+      #bar-bg { position: absolute; inset: 0; background: #fff; }
+      #bar {
+        position: absolute; left: 880px; top: 150px; width: 920px; height: 130px;
+        display: flex; align-items: center; gap: 30px; padding: 0 50px;
+        font-size: 60px; font-weight: 600; color: var(--ink);
+      }
+      .glass { position: relative; width: 49px; height: 49px; border: 7px solid var(--ink); border-radius: 50%; flex: none; }
+      .glass::after { content: ''; position: absolute; width: 7px; height: 26px; background: var(--ink); right: -12px; bottom: -22px; transform: rotate(-45deg); border-radius: 4px; }
+      #caret { width: 5px; height: 65px; background: var(--red); margin-left: -22px; }
+      .row {
+        position: absolute; left: 880px; width: 920px; height: 140px;
+        background: #fff; border-radius: 34px; display: flex; align-items: center; gap: 30px; padding: 0 26px;
+        transform-origin: 50% 0%;
+      }
+      .row img { width: 100px; height: 100px; object-fit: contain; background: #f3f3f3; border-radius: 22px; padding: 10px; flex: none; }
+      .row div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .row b { font-size: 32px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .row i { font-style: normal; font-size: 38px; font-weight: 800; }
+      .row mark { background: none; color: var(--red); }
+      .head { position: absolute; display: flex; flex-direction: column; gap: 18px; justify-content: center; }
+      .head h2 { font-weight: 900; letter-spacing: -0.04em; line-height: 0.95; }
+      .head p { font-weight: 600; font-size: 46px; letter-spacing: -0.01em; }
+      #s3-head { left: 130px; width: 660px; top: 0; height: 1080px; text-align: left; color: #fff; }
+      #s3-head h2 { font-size: 118px; }
+      #s3-head p { color: #9a9aa0; }
+
+      /* S4 department slats */
+      #s4 { background: transparent; }
+      #slats { position: absolute; inset: 0; }
+      .slat { position: absolute; overflow: hidden; background: #000; top: 0; height: 1080px; width: 385px; }
+      .ph { position: absolute; inset: 0; background-size: cover; background-position: center; }
+      .ph::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.6) 100%); }
+      .ph span {
+        position: absolute; z-index: 1; color: #fff; font-weight: 800; font-size: 40px; letter-spacing: -0.01em; text-shadow: 0 2px 18px rgba(0,0,0,0.65);
+        left: 34px; bottom: 60px; right: 20px;
+      }
+      #dept-card {
+        position: absolute; left: 50%; top: 50%; transform-origin: 50% 50%;
+        background: #fff; border-radius: 36px; padding: 44px 64px; text-align: center;
+        box-shadow: 0 50px 100px -30px rgba(0,0,0,0.6);
+      }
+      #dept-card h2 { font-size: 110px; font-weight: 900; letter-spacing: -0.04em; line-height: 0.95; white-space: nowrap; }
+      #dept-card h2 b { color: var(--red); }
+
+      /* S5 cart */
+      #s5 { background: transparent; }
+      #s5-in { position: absolute; inset: 0; background: var(--red); color: #fff; }
+      #cart-card { position: absolute; left: 1100px; top: 230px; width: 620px; height: 620px; background: #fff; border-radius: 60px; overflow: hidden; box-shadow: 0 60px 120px -40px rgba(60, 0, 0, 0.7); }
+      #cart-card img { width: 100%; height: 100%; object-fit: contain; padding: 50px; }
+      #cart-head { position: absolute; left: 130px; top: 170px; width: 860px; text-align: left; }
+      #cart-head h2 { font-size: 130px; font-weight: 900; letter-spacing: -0.04em; line-height: 0.95; }
+      #cart-info { position: absolute; left: 130px; top: 520px; width: 860px; text-align: left; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+      #cart-name { font-size: 40px; font-weight: 600; opacity: 0.85; }
+      #cart-price { font-size: 140px; font-weight: 900; letter-spacing: -0.04em; line-height: 0.95; }
+      #cart-btn { margin-top: 26px; position: relative; display: flex; align-items: center; justify-content: center; gap: 20px; width: 620px; height: 140px; border-radius: 70px; background: var(--ink); color: #fff; font-size: 50px; font-weight: 800; }
+      #ripple { position: absolute; left: 50%; top: 50%; width: 200px; height: 200px; margin: -100px 0 0 -100px; border-radius: 50%; border: 8px solid #fff; opacity: 0; }
+      #bag { position: absolute; left: 1715px; top: 45px; width: 150px; height: 150px; border-radius: 50%; background: #fff; }
+      #bag i { position: absolute; left: 44px; top: 56px; width: 62px; height: 54px; border: 8px solid var(--ink); border-radius: 6px 6px 14px 14px; }
+      #bag i::before { content: ''; position: absolute; left: 10px; top: -30px; width: 26px; height: 26px; border: 8px solid var(--ink); border-bottom: none; border-radius: 20px 20px 0 0; }
+      #bag b { position: absolute; right: -6px; top: -6px; width: 56px; height: 56px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 34px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+      #toast { position: absolute; left: 1410px; top: 485px; display: flex; align-items: center; gap: 22px; padding: 26px 44px 26px 30px; border-radius: 60px; background: var(--ink); color: #fff; font-size: 44px; font-weight: 700; white-space: nowrap; box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5); }
+      #toast .tick { width: 54px; height: 54px; border-radius: 50%; background: #fff; position: relative; }
+      #toast .tick::after { content: ''; position: absolute; left: 18px; top: 10px; width: 14px; height: 26px; border: solid var(--ink); border-width: 0 7px 7px 0; transform: rotate(45deg); }
+
+      /* S6 loyalty */
+      #s6 { background: #0b0b0c; color: #fff; }
+      #s6-in { position: absolute; inset: 0; }
+      #loy-head { left: 130px; width: 680px; top: 0; height: 1080px; text-align: left; }
+      #loy-head h2 { font-size: 112px; }
+      #loy-head p { color: #9a9aa0; }
+      .stage { position: absolute; inset: 0; perspective: 1800px; }
+      #loy-card {
+        position: absolute; left: 880px; top: 230px; width: 920px; height: 560px;
+        border-radius: 56px; overflow: hidden; padding: 60px 64px;
+        background: linear-gradient(135deg, #2a2a2d 0%, #141415 60%);
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.08), 0 80px 140px -40px rgba(210, 10, 17, 0.45);
+        display: flex; flex-direction: column; justify-content: space-between;
+      }
+      #loy-card .roof { position: absolute; right: -60px; top: -40px; width: 360px; height: 220px; }
+      #loy-card small { font-size: 30px; font-weight: 700; letter-spacing: 0.08em; color: #b9b9be; }
+      #loy-points { font-size: 230px; font-weight: 900; letter-spacing: -0.05em; line-height: 0.85; font-variant-numeric: tabular-nums; }
+      #loy-points em { font-style: normal; font-size: 64px; font-weight: 800; letter-spacing: -0.01em; color: var(--red); margin-left: 16px; }
+      #loy-card .foot { display: flex; justify-content: space-between; font-size: 34px; font-weight: 600; color: #d6d6da; }
+      #tiers { position: absolute; left: 880px; top: 850px; width: 920px; display: flex; gap: 20px; }
+      .tier { flex: 1; height: 120px; border-radius: 60px; display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: 800; background: #1d1d1f; color: #8a8a8f; }
+
+      /* S7 logo */
+      #s7 { background: #000; }
+      #s7-bg { position: absolute; inset: 0; background: #fff; }
+      #burst { position: absolute; left: 1400px; top: 540px; width: 0; height: 0; }
+      .bcard { position: absolute; width: 170px; height: 170px; margin: -85px 0 0 -85px; background: #fff; border-radius: 30px; overflow: hidden; box-shadow: 0 24px 50px -20px rgba(20,20,20,0.35); }
+      .bcard img { width: 100%; height: 100%; object-fit: contain; padding: 14px; }
+      #lockup { position: absolute; left: 130px; width: 820px; top: 315px; display: flex; flex-direction: column; align-items: flex-start; gap: 30px; text-align: left; }
+      #lockup img { width: 700px; height: auto; }
+      #lockup h3 { font-size: 120px; font-weight: 900; letter-spacing: -0.04em; line-height: 0.95; }
+      #lockup p { font-size: 48px; font-weight: 700; color: var(--red); letter-spacing: 0.02em; }
+      #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+      #shock { position: absolute; left: 480px; top: 455px; width: 400px; height: 400px; margin: -200px 0 0 -200px; border-radius: 50%; border: 18px solid var(--red); opacity: 0; }
+      /* Finale phones: the real app */
+      #phones { position: absolute; inset: 0; perspective: 2200px; }
+      .phone { position: absolute; width: 568px; height: 1258px; transform-origin: 50% 0%; }
+      .phone .frame {
+        width: 100%; height: 100%; border-radius: 88px; padding: 14px; background: #0c0c0d;
+        box-shadow: 0 0 0 2px #b9b9be, 0 0 0 5px #8e8e93, 0 0 0 6px #d8d8dc, 0 80px 140px -40px rgba(20, 20, 20, 0.45);
+      }
+      .phone .display { position: relative; width: 540px; height: 1230px; border-radius: 74px; overflow: hidden; background: #fff; padding-top: 61px; }
+      .phone .display img { display: block; width: 540px; height: 1169px; }
+      .phone .island { position: absolute; left: 50%; top: 13px; width: 132px; height: 38px; margin-left: -66px; background: #000; border-radius: 20px; }
+      .phone .clock { position: absolute; left: 56px; top: 14px; font-size: 25px; font-weight: 600; color: #000; }
+      #phone-l, #phone-r { left: 1116px; top: 230px; }
+      #phone-c { left: 1116px; top: 160px; }
+  
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="dacus-trailer-landscape" data-start="0" data-duration="15" data-width="1920" data-height="1080">
+      <div id="cam">
+        <!-- S1 cold open -->
+        <div class="scene clip" id="s1" data-start="0" data-duration="2.444" data-track-index="1">
+          <svg id="roofline" viewBox="0 0 600 340" class="" fill="none"><path id="roofpath" d="M20 320 L300 40 L580 320" stroke="#d20a11" stroke-width="18" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+          <div class="full center hit hidden" id="hit-tot">Tot</div>
+          <div class="full center hit hidden" id="hit-pentru">pentru</div>
+          <div class="full center hit hidden" id="hit-casa">Casă<b>.</b></div>
+          <div class="full strobe hidden" id="strobe-0" style="background-image:url('assets/store/photos/constructii-si-renovare.jpg')"><span>Construcții</span></div>
+          <div class="full strobe hidden" id="strobe-1" style="background-image:url('assets/store/photos/electrice-si-iluminat.jpg')"><span>Electrice</span></div>
+          <div class="full strobe hidden" id="strobe-2" style="background-image:url('assets/store/photos/casa-si-gradina.jpg')"><span>Grădină</span></div>
+          <div class="full strobe hidden" id="strobe-3" style="background-image:url('assets/store/photos/baie-si-instalatii.jpg')"><span>Baie</span></div>
+          <div class="full strobe hidden" id="strobe-4" style="background-image:url('assets/store/photos/bucatarie-si-dining.jpg')"><span>Bucătărie</span></div>
+          <div class="full strobe hidden" id="strobe-5" style="background-image:url('assets/store/photos/mobilier.jpg')"><span>Mobilier</span></div>
+        </div>
+
+        <!-- S2 product storm -->
+        <div class="scene clip" id="s2" data-start="2.294" data-duration="2.644" data-track-index="2">
+          <div class="tunnel"><div class="space" id="space">
+            <div class="pcard" id="t-0"><img src="assets/store/products/cafetiera-prin.jpg" alt="" /></div>
+            <div class="pcard" id="t-1"><img src="assets/store/products/masina-de.jpg" alt="" /></div>
+            <div class="pcard" id="t-2"><img src="assets/store/products/polizor-unghiular.jpg" alt="" /></div>
+            <div class="pcard" id="t-3"><img src="assets/store/products/plafonier.jpg" alt="" /></div>
+            <div class="pcard" id="t-4"><img src="assets/store/products/baterie-lavoar.jpg" alt="" /></div>
+            <div class="pcard" id="t-5"><img src="assets/store/products/set-chei.jpg" alt="" /></div>
+            <div class="pcard" id="t-6"><img src="assets/store/products/ghiveci.jpg" alt="" /></div>
+            <div class="pcard" id="t-7"><img src="assets/store/products/aspirator.jpg" alt="" /></div>
+            <div class="pcard" id="t-8"><img src="assets/store/products/fierbator.jpg" alt="" /></div>
+            <div class="pcard" id="t-9"><img src="assets/store/products/tigaie.jpg" alt="" /></div>
+            <div class="pcard" id="t-10"><img src="assets/store/products/scaun.jpg" alt="" /></div>
+            <div class="pcard" id="t-11"><img src="assets/store/products/lampa.jpg" alt="" /></div>
+            <div class="pcard" id="t-12"><img src="assets/store/products/prelungitor.jpg" alt="" /></div>
+            <div class="pcard" id="t-13"><img src="assets/store/products/ciocan.jpg" alt="" /></div>
+            <div class="pcard" id="t-14"><img src="assets/store/products/surubelnita.jpg" alt="" /></div>
+            <div class="pcard" id="t-15"><img src="assets/store/products/mixer.jpg" alt="" /></div>
+            <div class="pcard" id="t-16"><img src="assets/store/products/boxa.jpg" alt="" /></div>
+            <div class="pcard" id="t-17"><img src="assets/store/products/trotineta.jpg" alt="" /></div>
+            <div class="pcard" id="t-18"><img src="assets/store/products/canapea.jpg" alt="" /></div>
+            <div class="pcard" id="t-19"><img src="assets/store/products/drujba.jpg" alt="" /></div>
+            <div class="pcard" id="t-20"><img src="assets/store/products/cort.jpg" alt="" /></div>
+            <div class="pcard" id="t-21"><img src="assets/store/products/bec-led.jpg" alt="" /></div>
+          </div></div>
+          <div id="count-wrap">
+            <div id="count-big"><span class="m"><span class="w"><span id="count">17.000</span><i>+</i></span></span></div>
+            <div id="count-sub"><span class="m"><span class="w">produse.</span></span> <span class="m"><span class="w">Un</span></span> <span class="m"><span class="w">singur</span></span> <span class="m"><span class="w">loc.</span></span></div>
+          </div>
+          <div id="zoom-card"><img src="assets/store/products/bec-led.jpg" alt="" /></div>
+        </div>
+
+        <!-- S3 search -->
+        <div class="scene clip" id="s3" data-start="4.688" data-duration="2.125" data-track-index="3">
+          <div id="s3-content">
+            <div class="head" id="s3-head"><h2><span class="m"><span class="w">Găsești</span></span> <span class="m"><span class="w">orice.</span></span></h2><p id="s3-sub">Din prima căutare.</p></div>
+            <div class="row" id="row-0" style="top:330px"><img src="assets/store/products/bec-led.jpg" alt="" /><div><b>Bec <mark>Led</mark> A60 E27 9w Verde</b><i>16,90 RON</i></div></div>
+            <div class="row" id="row-1" style="top:484px"><img src="assets/store/products/plafonier.jpg" alt="" /><div><b>Plafoniera <mark>Led</mark> 24w Ip44 Cu Senzor 4000k Alb Neutru - Negru</b><i>119,90 RON</i></div></div>
+            <div class="row" id="row-2" style="top:638px"><img src="assets/store/products/lampa.jpg" alt="" /><div><b>Lampă de veghe cu senzor de mișcare <mark>LED</mark> 0,5 W alb rece Rebel ZAR0507</b><i>19,90 RON</i></div></div>
+            <div class="row" id="row-3" style="top:792px"><img src="assets/store/products/cort.jpg" alt="" /><div><b>Cortină luminoasă <mark>LED</mark> cu stele și lumină albă caldă de 2 × 1 m cu 138 LED-uri Rebel ZAR0570</b><i>78,90 RON</i></div></div>
+            <div id="bar-bg"></div>
+            <div id="bar"><span class="glass"></span><span id="typed">led</span><span id="caret"></span></div>
+          </div>
+        </div>
+
+        <!-- S4 departments -->
+        <div class="scene clip" id="s4" data-start="6.362" data-duration="2.325" data-track-index="4">
+          <div id="slats">
+            <div class="slat" id="slat-0" style="left:0px"><div class="ph" id="ph-0-0" style="background-image:url('assets/store/photos/constructii-si-renovare.jpg');background-position:50% 40%"><span>Construcții și Renovare</span></div><div class="ph hidden" id="ph-0-1" style="background-image:url('assets/store/photos/mobilier.jpg');background-position:50% 40%"><span>Mobilier</span></div><div class="ph hidden" id="ph-0-2" style="background-image:url('assets/store/photos/auto-si-moto.jpg');background-position:50% 40%"><span>Auto și Moto</span></div></div>
+            <div class="slat" id="slat-1" style="left:384px"><div class="ph" id="ph-1-0" style="background-image:url('assets/store/photos/electrice-si-iluminat.jpg');background-position:50% 50%"><span>Electrice și Iluminat</span></div><div class="ph hidden" id="ph-1-1" style="background-image:url('assets/store/photos/scule-si-unelte.jpg');background-position:50% 50%"><span>Scule și Unelte</span></div><div class="ph hidden" id="ph-1-2" style="background-image:url('assets/store/photos/craciun.jpg');background-position:50% 50%"><span>Crăciun</span></div></div>
+            <div class="slat" id="slat-2" style="left:768px"><div class="ph" id="ph-2-0" style="background-image:url('assets/store/photos/casa-si-gradina.jpg');background-position:50% 60%"><span>Casă și Grădină</span></div><div class="ph hidden" id="ph-2-1" style="background-image:url('assets/store/photos/electronice-gadgeturi.jpg');background-position:50% 60%"><span>Electronice</span></div><div class="ph hidden" id="ph-2-2" style="background-image:url('assets/store/photos/casa-si-gradina.jpg');background-position:50% 60%"><span>Grădină și Exterior</span></div></div>
+            <div class="slat" id="slat-3" style="left:1152px"><div class="ph" id="ph-3-0" style="background-image:url('assets/store/photos/baie-si-instalatii.jpg');background-position:50% 40%"><span>Baie și Instalații</span></div><div class="ph hidden" id="ph-3-1" style="background-image:url('assets/store/photos/curatenie-si-intretinere.jpg');background-position:50% 40%"><span>Curățenie</span></div><div class="ph hidden" id="ph-3-2" style="background-image:url('assets/store/photos/electrice-si-iluminat.jpg');background-position:50% 40%"><span>Iluminat</span></div></div>
+            <div class="slat" id="slat-4" style="left:1536px"><div class="ph" id="ph-4-0" style="background-image:url('assets/store/photos/bucatarie-si-dining.jpg');background-position:50% 50%"><span>Bucătărie și Dining</span></div><div class="ph hidden" id="ph-4-1" style="background-image:url('assets/store/photos/jucarii-si-copii.jpg');background-position:50% 50%"><span>Jucării și Copii</span></div><div class="ph hidden" id="ph-4-2" style="background-image:url('assets/store/photos/constructii-si-renovare.jpg');background-position:50% 50%"><span>Gresie și Faianță</span></div></div>
+          </div>
+          <div id="dept-card"><h2><span class="m"><span class="w">Totul,</span></span> <span class="m"><span class="w">pe</span></span><br /><span class="m"><span class="w">departamente<b>.</b></span></span></h2></div>
+        </div>
+
+        <!-- S5 add to cart (under S4: the slats open onto it) -->
+        <div class="scene clip" id="s5" data-start="8.153" data-duration="2.409" data-track-index="5">
+          <div id="s5-in">
+            <div id="cart-head"><h2><span class="m"><span class="w">Un</span></span> <span class="m"><span class="w">gest.</span></span><br /><span class="m"><span class="w">În</span></span> <span class="m"><span class="w">coș.</span></span></h2></div>
+            <div class="stage"><div id="cart-card"><img src="assets/store/products/cafetiera-prin.jpg" alt="" /></div></div>
+            <div id="cart-info">
+              <div id="cart-name">Cafetieră Teesa AROMA 100</div>
+              <div id="cart-price"><span class="w">109,90 RON</span></div>
+              <div id="cart-btn"><span id="ripple"></span>Adaugă în coș</div>
+            </div>
+            <div id="bag"><i></i><b id="bag-count">1</b></div>
+            <div id="toast"><span class="tick"></span>Adăugat în coș</div>
+          </div>
+        </div>
+
+        <!-- S6 loyalty -->
+        <div class="scene clip" id="s6" data-start="10.028" data-duration="1.791" data-track-index="6">
+          <div id="s6-in">
+            <div class="head" id="loy-head"><h2><span class="m"><span class="w">Puncte</span></span> <span class="m"><span class="w">la</span></span> <span class="m"><span class="w">fiecare</span></span> <span class="m"><span class="w">comandă.</span></span></h2><p id="loy-sub">100 de puncte = 5 RON.</p></div>
+            <div class="stage">
+              <div id="loy-card">
+                <svg  viewBox="0 0 600 340" class="roof" fill="none"><path  d="M20 320 L300 40 L580 320" stroke="#d20a11" stroke-width="26" stroke-linecap="square" stroke-linejoin="miter"/></svg>
+                <small>PROGRAM DE FIDELITATE</small>
+                <div id="loy-points"><span id="points">0</span><em>puncte</em></div>
+                <div class="foot"><span>1 RON = 1 punct</span><span>DACUS</span></div>
+              </div>
+            </div>
+            <div id="tiers"><div class="tier" id="tier-0">Bronze</div><div class="tier" id="tier-1">Silver</div><div class="tier" id="tier-2">Gold</div></div>
+          </div>
+        </div>
+
+        <!-- S7 logo -->
+        <div class="scene clip" id="s7" data-start="11.669" data-duration="3.331" data-track-index="7">
+          <div id="s7-bg"></div>
+          <div id="burst">
+            <div class="bcard" id="b-0"><img src="assets/store/products/cafetiera-prin.jpg" alt="" /></div>
+            <div class="bcard" id="b-1"><img src="assets/store/products/masina-de.jpg" alt="" /></div>
+            <div class="bcard" id="b-2"><img src="assets/store/products/polizor-unghiular.jpg" alt="" /></div>
+            <div class="bcard" id="b-3"><img src="assets/store/products/plafonier.jpg" alt="" /></div>
+            <div class="bcard" id="b-4"><img src="assets/store/products/baterie-lavoar.jpg" alt="" /></div>
+            <div class="bcard" id="b-5"><img src="assets/store/products/set-chei.jpg" alt="" /></div>
+            <div class="bcard" id="b-6"><img src="assets/store/products/ghiveci.jpg" alt="" /></div>
+            <div class="bcard" id="b-7"><img src="assets/store/products/aspirator.jpg" alt="" /></div>
+            <div class="bcard" id="b-8"><img src="assets/store/products/ciocan.jpg" alt="" /></div>
+            <div class="bcard" id="b-9"><img src="assets/store/products/surubelnita.jpg" alt="" /></div>
+            <div class="bcard" id="b-10"><img src="assets/store/products/mixer.jpg" alt="" /></div>
+            <div class="bcard" id="b-11"><img src="assets/store/products/boxa.jpg" alt="" /></div>
+            <div class="bcard" id="b-12"><img src="assets/store/products/trotineta.jpg" alt="" /></div>
+            <div class="bcard" id="b-13"><img src="assets/store/products/canapea.jpg" alt="" /></div>
+            <div class="bcard" id="b-14"><img src="assets/store/products/drujba.jpg" alt="" /></div>
+            <div class="bcard" id="b-15"><img src="assets/store/products/cort.jpg" alt="" /></div>
+            <div class="bcard" id="b-16"><img src="assets/store/products/bec-led.jpg" alt="" /></div>
+          </div>
+          <div id="phones">
+            <div class="phone" id="phone-l"><div class="frame"><div class="display"><img src="assets/screens/departments.png" alt="" /><i class="island"></i><span class="clock">9:41</span></div></div></div>
+            <div class="phone" id="phone-r"><div class="frame"><div class="display"><img src="assets/screens/product-added.png" alt="" /><i class="island"></i><span class="clock">9:41</span></div></div></div>
+            <div class="phone" id="phone-c"><div class="frame"><div class="display"><img src="assets/screens/home.png" alt="" /><i class="island"></i><span class="clock">9:41</span></div></div></div>
+          </div>
+          <div id="shock"></div>
+          <div id="lockup">
+            <img id="logo" src="assets/dacus-logo.png" alt="Dacus" />
+            <h3 id="lockup-title"><span class="m"><span class="w">Aplicația</span></span> <span class="m"><span class="w">Dacus.</span></span></h3>
+            <p id="lockup-url">Tot pentru casă · dacus.ro</p>
+          </div>
+          <div id="flash"></div>
+        </div>
+      </div>
+      <audio id="bgm" class="clip" src="assets/audio/bgm.wav" data-start="0" data-duration="15" data-track-index="9"></audio>
+    </div>
+    <script>
+      const T = {"line":0.4688,"tot":0.9375,"pentru":1.1719,"casa":1.4063,"strobe":1.6406,"strobeStep":0.1172,"storm":2.3438,"stormZoom":4.3125,"search":4.6875,"typing":5.1563,"results":5.9766,"whip":6.375,"depts":6.5625,"flip1":7.0313,"flip2":7.5,"deptsOut":8.2031,"cart":8.4375,"price":8.9063,"press":9.375,"added":9.6094,"iris":10.0781,"loyalty":10.3125,"points":10.5469,"tiers":11.25,"collapse":11.5313,"silence":11.7188,"drop":12.1875,"end":15};
+      const G = {"W":1920,"H":1080,"P":false,"tunnel":[{"id":"cafetiera-prin","x":730,"y":144,"z":-856,"r":7,"spin":-29},{"id":"masina-de","x":403,"y":310,"z":-978,"r":15,"spin":-2},{"id":"polizor-unghiular","x":101,"y":490,"z":-1206,"r":-8,"spin":-27},{"id":"plafonier","x":-560,"y":348,"z":-1356,"r":-20,"spin":-3},{"id":"baterie-lavoar","x":-634,"y":4,"z":-1541,"r":-19,"spin":-21},{"id":"set-chei","x":-672,"y":-64,"z":-1790,"r":1,"spin":-43},{"id":"ghiveci","x":-573,"y":-381,"z":-1892,"r":12,"spin":-16},{"id":"aspirator","x":98,"y":-326,"z":-1952,"r":2,"spin":9},{"id":"fierbator","x":543,"y":-345,"z":-2190,"r":-8,"spin":21},{"id":"tigaie","x":794,"y":60,"z":-2379,"r":-9,"spin":-19},{"id":"scaun","x":812,"y":146,"z":-2713,"r":8,"spin":39},{"id":"lampa","x":524,"y":424,"z":-2829,"r":18,"spin":-33},{"id":"prelungitor","x":-59,"y":324,"z":-2999,"r":-1,"spin":10},{"id":"ciocan","x":-606,"y":114,"z":-3298,"r":17,"spin":-20},{"id":"surubelnita","x":-668,"y":-69,"z":-3429,"r":13,"spin":-34},{"id":"mixer","x":-426,"y":-369,"z":-3738,"r":-3,"spin":7},{"id":"boxa","x":-233,"y":-420,"z":-3751,"r":9,"spin":-18},{"id":"trotineta","x":395,"y":-439,"z":-4054,"r":20,"spin":35},{"id":"canapea","x":723,"y":-199,"z":-4125,"r":-16,"spin":18},{"id":"drujba","x":900,"y":48,"z":-4499,"r":-16,"spin":-2},{"id":"cort","x":322,"y":304,"z":-4710,"r":-13,"spin":19},{"id":"bec-led","x":-54,"y":365,"z":-4733,"r":-13,"spin":14}],"burst":[{"id":"cafetiera-prin","x":549,"y":87,"r":-5},{"id":"masina-de","x":495,"y":205,"r":-9},{"id":"polizor-unghiular","x":402,"y":307,"r":4},{"id":"plafonier","x":275,"y":383,"r":12},{"id":"baterie-lavoar","x":127,"y":429,"r":-5},{"id":"set-chei","x":-32,"y":439,"r":9},{"id":"ghiveci","x":-188,"y":414,"r":-3},{"id":"aspirator","x":-329,"y":356,"r":-11},{"id":"ciocan","x":-402,"y":-307,"r":11},{"id":"surubelnita","x":-275,"y":-383,"r":12},{"id":"mixer","x":-127,"y":-429,"r":-9},{"id":"boxa","x":32,"y":-439,"r":3},{"id":"trotineta","x":188,"y":-414,"r":0},{"id":"canapea","x":329,"y":-356,"r":-9},{"id":"drujba","x":443,"y":-269,"r":-14},{"id":"cort","x":522,"y":-160,"r":6},{"id":"bec-led","x":558,"y":-38,"r":6}],"slatCount":5,"iris":{"x":400,"y":800},"bar":{"x":880,"y":150,"w":920,"h":130},"cartCard":{"x":1100,"y":230,"s":620},"bag":{"x":1790,"y":120},"logoY":455,"phones":{"cx":1400,"top":160,"scale":0.6,"side":0.5,"dx":290}};
+      const tl = gsap.timeline({ paused: true });
+      const show = (t, at) => tl.set(t, { autoAlpha: 1 }, at);
+      const hide = (t, at) => tl.set(t, { autoAlpha: 0 }, at);
+      const wordsIn = (scope, at, stagger = 0.06) =>
+        tl.fromTo(scope + ' .w', { yPercent: 125 }, { yPercent: 0, duration: 0.7, ease: 'expo.out', stagger }, at);
+
+      // ================= S1 cold open =================
+      const roof = document.getElementById('roofpath');
+      const roofLen = roof.getTotalLength();
+      gsap.set(roof, { strokeDasharray: roofLen, strokeDashoffset: roofLen });
+      tl.to(roof, { strokeDashoffset: 0, duration: T.tot - T.line - 0.05, ease: 'expo.out' }, T.line);
+      tl.fromTo('#roofline', { scale: 1 }, { scale: 1.12, duration: T.tot - T.line, ease: 'none' }, T.line);
+      hide('#roofline', T.tot);
+      // Word hits, one per 8th, each a hard cut with a punch-in.
+      [['#hit-tot', T.tot], ['#hit-pentru', T.pentru], ['#hit-casa', T.casa]].forEach(([el, t], i, all) => {
+        show(el, t);
+        tl.fromTo(el, { scale: 1.35, filter: 'blur(12px)' }, { scale: 1, filter: 'blur(0px)', duration: 0.22, ease: 'expo.out' }, t);
+        if (i < all.length - 1) hide(el, all[i + 1][1]);
+      });
+      hide('#hit-casa', T.strobe);
+      // Photo strobe on 16ths, labels slamming, a slow push through all of it.
+      [0,1,2,3,4,5].forEach((i) => {
+        const t = T.strobe + i * T.strobeStep;
+        const el = '#strobe-' + i;
+        show(el, t);
+        tl.fromTo(el, { scale: 1.18 - i * 0.02 }, { scale: 1.08 - i * 0.02, duration: T.strobeStep, ease: 'none' }, t);
+        tl.fromTo(el + ' span', { xPercent: -12, opacity: 0 }, { xPercent: 0, opacity: 1, duration: 0.09, ease: 'power2.out' }, t);
+        if (i < 5) hide(el, t + T.strobeStep);
+      });
+      // Zoom-through the last photo into white.
+      tl.to('#strobe-5', { scale: 3.2, filter: 'blur(26px)', duration: T.storm - (T.strobe + 5 * T.strobeStep), ease: 'expo.in' }, T.strobe + 5 * T.strobeStep);
+
+      // ================= S2 product storm =================
+      G.tunnel.forEach((c, i) => gsap.set('#t-' + i, { x: c.x, y: c.y, z: c.z, rotation: c.r }));
+      tl.fromTo('#space', { z: -400 }, { z: 4300, duration: T.stormZoom - T.storm + 0.3, ease: 'power1.in' }, T.storm);
+      G.tunnel.forEach((c, i) => tl.fromTo('#t-' + i, { rotationY: 0 }, { rotationY: c.spin, duration: T.search - T.storm, ease: 'none' }, T.storm));
+      tl.fromTo('#s2', { opacity: 0 }, { opacity: 1, duration: 0.12, ease: 'none' }, T.storm - 0.05);
+      wordsIn('#count-big', T.storm + 0.05);
+      const counter = { v: 0 };
+      tl.fromTo(counter, { v: 0 }, {
+        v: 17000, duration: 1.1, ease: 'expo.out',
+        onUpdate: () => { document.getElementById('count').textContent = String(Math.round(counter.v / 100) * 100).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); },
+      }, T.storm + 0.1);
+      wordsIn('#count-sub', T.storm + 0.45, 0.07);
+      tl.to('#count-wrap', { scale: 0.85, opacity: 0, filter: 'blur(10px)', duration: 0.3, ease: 'power2.in' }, T.stormZoom - 0.1);
+      // The bulb card flies at the lens and fills the frame white.
+      tl.fromTo('#zoom-card', { scale: 0.05, rotation: -25, opacity: 0 }, { scale: 9, rotation: 0, opacity: 1, duration: T.search - T.stormZoom, ease: 'expo.in' }, T.stormZoom);
+
+      // ================= S3 search =================
+      const b = G.bar;
+      tl.fromTo('#bar-bg',
+        { clipPath: 'inset(0px 0px 0px 0px round 0px)' },
+        { clipPath: 'inset(' + b.y + 'px ' + (G.W - b.x - b.w) + 'px ' + (G.H - b.y - b.h) + 'px ' + b.x + 'px round ' + b.h / 2 + 'px)', duration: 0.55, ease: 'expo.inOut' },
+        T.search);
+      tl.fromTo('#bar', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.3, ease: 'power2.out' }, T.search + 0.45);
+      // Typing on 16ths.
+      const typed = { n: 0 };
+      tl.fromTo(typed, { n: 0 }, {
+        n: 3, duration: T.strobeStep * 3, ease: 'steps(3)',
+        onUpdate: () => { document.getElementById('typed').textContent = 'led'.slice(0, Math.round(typed.n)); },
+      }, T.typing);
+      tl.fromTo('#caret', { opacity: 1 }, { opacity: 0, duration: 0.23, ease: 'steps(1)', repeat: 7, yoyo: true }, T.search + 0.5);
+      wordsIn('#s3-head h2', T.search + 0.5);
+      tl.fromTo('#s3-sub', { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out' }, T.search + 0.8);
+      // Results cascade out of the bar, tilting up into place.
+      [0, 1, 2, 3].forEach((i) => {
+        tl.fromTo('#row-' + i,
+          { y: -(140 + i * 60), rotationX: -70, opacity: 0, transformPerspective: 1200 },
+          { y: 0, rotationX: 0, opacity: 1, duration: 0.6, ease: 'expo.out' },
+          T.results + i * 0.06);
+      });
+      // Whip pan out.
+      tl.to('#s3-content', { x: -G.W * 1.1, skewX: 18, filter: 'blur(28px)', duration: T.depts - T.whip + 0.08, ease: 'power3.in' }, T.whip);
+
+      // ================= S4 departments =================
+      const axis = G.P ? 'scaleY' : 'scaleX';
+      tl.fromTo('#slats', { x: G.W * 0.9, skewX: -16, filter: 'blur(26px)' }, { x: 0, skewX: 0, filter: 'blur(0px)', duration: 0.45, ease: 'expo.out' }, T.depts - 0.08);
+      for (let i = 0; i < G.slatCount; i++) {
+        tl.fromTo('#slat-' + i, { [G.P ? 'x' : 'y']: (i % 2 ? 1 : -1) * 260 }, { [G.P ? 'x' : 'y']: 0, duration: 0.6, ease: 'expo.out' }, T.depts - 0.05 + i * 0.03);
+        // Slow drift inside each slat.
+        tl.fromTo('#slat-' + i + ' .ph', { scale: 1.12 }, { scale: 1.0, duration: T.deptsOut - T.depts + 0.4, ease: 'none' }, T.depts);
+        // Two cascading flips to new departments.
+        [T.flip1, T.flip2].forEach((ft, set) => {
+          const t0 = ft - 0.12 + i * 0.04;
+          tl.to('#slat-' + i, { [axis]: 0, duration: 0.12, ease: 'power2.in' }, t0);
+          hide('#ph-' + i + '-' + set, t0 + 0.12);
+          show('#ph-' + i + '-' + (set + 1), t0 + 0.12);
+          tl.to('#slat-' + i, { [axis]: 1, duration: 0.2, ease: 'power2.out' }, t0 + 0.12);
+        });
+        // Out: the slats snap shut from the middle outward, opening onto red.
+        const order = Math.abs(i - (G.slatCount - 1) / 2);
+        tl.to('#slat-' + i, { [axis]: 0, duration: 0.22, ease: 'expo.in' }, T.deptsOut + order * 0.05);
+      }
+      gsap.set('#dept-card', { xPercent: -50, yPercent: -50 });
+      tl.fromTo('#dept-card', { scale: 0.4, rotation: -8, opacity: 0 }, { scale: 1, rotation: -3, opacity: 1, duration: 0.5, ease: 'back.out(2)' }, T.depts + 0.3);
+      wordsIn('#dept-card h2', T.depts + 0.36, 0.05);
+      tl.to('#dept-card', { rotation: 3, duration: 0.3, ease: 'back.out(3)' }, T.flip1 + 0.35);
+      tl.to('#dept-card', { rotation: -2, duration: 0.28, ease: 'back.out(3)' }, T.flip2 + 0.35);
+      tl.to('#dept-card', { scale: 0, rotation: 12, duration: 0.25, ease: 'back.in(2)' }, T.deptsOut - 0.05);
+
+      // ================= S5 add to cart =================
+      tl.fromTo('#cart-card', { y: G.H * 0.5, rotationX: 60, rotationZ: -12, scale: 0.6 }, { y: 0, rotationX: 0, rotationZ: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, T.cart);
+      tl.fromTo('#cart-card', { rotationY: -10 }, { rotationY: 10, duration: 1.4, ease: 'sine.inOut', immediateRender: false }, T.cart + 0.4);
+      wordsIn('#cart-head h2', T.cart + 0.1, 0.07);
+      tl.fromTo('#cart-name', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, ease: 'expo.out' }, T.cart + 0.3);
+      tl.fromTo('#cart-price .w', { scale: 2.2, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: 'expo.out' }, T.price);
+      tl.fromTo('#cart-info', { x: 0 }, { keyframes: { x: [0, -14, 12, -8, 5, 0] }, duration: 0.3, ease: 'none' }, T.price + 0.02);
+      tl.fromTo('#cart-btn', { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.25, ease: 'back.out(2.2)' }, T.price + 0.1);
+      tl.to('#cart-btn', { scale: 0.9, duration: 0.08, ease: 'power2.in' }, T.press - 0.08);
+      tl.to('#cart-btn', { scale: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' }, T.press);
+      tl.fromTo('#ripple', { scale: 0.2, opacity: 1 }, { scale: 3.4, opacity: 0, duration: 0.6, ease: 'expo.out' }, T.press);
+      // The product dives into the bag.
+      const card = G.cartCard;
+      const toBagX = G.bag.x - (card.x + card.s / 2);
+      const toBagY = G.bag.y - (card.y + card.s / 2);
+      tl.to('#cart-card', { x: toBagX, y: toBagY, scale: 0.08, rotationZ: 30, duration: 0.45, ease: 'power3.in' }, T.press + 0.06);
+      tl.fromTo('#bag', { scale: 0 }, { scale: 1, duration: 0.4, ease: 'back.out(2.5)' }, T.press - 0.2);
+      tl.to('#bag', { scale: 1.25, duration: 0.1, ease: 'power2.out', yoyo: true, repeat: 1 }, T.added);
+      tl.fromTo('#bag-count', { scale: 0 }, { scale: 1, duration: 0.35, ease: 'back.out(3)' }, T.added);
+      gsap.set('#toast', { xPercent: -50 });
+      tl.fromTo('#toast', { scale: 0.3, opacity: 0, y: 60 }, { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: 'back.out(2)' }, T.added + 0.05);
+      // Iris out onto the loyalty scene, closing on the button.
+      tl.fromTo('#s5-in',
+        { clipPath: 'circle(150% at ' + G.iris.x + 'px ' + G.iris.y + 'px)' },
+        { clipPath: 'circle(0% at ' + G.iris.x + 'px ' + G.iris.y + 'px)', duration: T.loyalty - T.iris, ease: 'power3.in' },
+        T.iris);
+
+      // ================= S6 loyalty =================
+      tl.fromTo('#loy-card', { rotationY: -95, rotationX: 15, scale: 0.7, opacity: 0 }, { rotationY: 0, rotationX: 0, scale: 1, opacity: 1, duration: 0.9, ease: 'expo.out' }, T.loyalty);
+      tl.to('#loy-card', { rotationY: -6, duration: 1.2, ease: 'sine.inOut' }, T.loyalty + 0.9);
+      wordsIn('#loy-head h2', T.loyalty + 0.05, 0.05);
+      tl.fromTo('#loy-sub', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: 'expo.out' }, T.loyalty + 0.4);
+      const pts = { v: 0 };
+      tl.fromTo(pts, { v: 0 }, {
+        v: 109, duration: 0.9, ease: 'expo.out',
+        onUpdate: () => { document.getElementById('points').textContent = String(Math.round(pts.v)); },
+      }, T.points);
+      ['#tier-0', '#tier-1', '#tier-2'].forEach((el, i) => {
+        const t = T.tiers + i * T.strobeStep;
+        tl.fromTo(el, { backgroundColor: '#1d1d1f', color: '#8a8a8f', scale: 1 }, { backgroundColor: '#d20a11', color: '#ffffff', scale: 1.08, duration: 0.08, ease: 'power2.out' }, t);
+        if (i < 2) tl.to(el, { backgroundColor: '#1d1d1f', color: '#8a8a8f', scale: 1, duration: 0.1 }, t + T.strobeStep);
+      });
+      tl.fromTo('#tiers', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease: 'expo.out' }, T.loyalty + 0.5);
+      // Everything collapses to a point: the beat drops out.
+      tl.to('#s6-in', { scale: 0, rotation: 8, filter: 'blur(14px)', duration: T.silence - T.collapse, ease: 'expo.in' }, T.collapse);
+
+      // ================= S7 drop + logo =================
+      gsap.set('#s7-bg', { autoAlpha: 0 });
+      show('#s7-bg', T.drop);
+      tl.fromTo('#flash', { opacity: 1 }, { opacity: 0, duration: 0.45, ease: 'power2.out', immediateRender: false }, T.drop);
+      tl.fromTo('#logo', { scale: 3.2, filter: 'blur(20px)', opacity: 0 }, { scale: 1, filter: 'blur(0px)', opacity: 1, duration: 0.5, ease: 'expo.out' }, T.drop);
+      tl.fromTo('#cam', { x: 0, y: 0 }, { keyframes: { x: [0, 18, -14, 10, -6, 3, 0], y: [0, -12, 10, -7, 4, -2, 0] }, duration: 0.45, ease: 'none' }, T.drop);
+      tl.fromTo('#shock', { scale: 0.2, opacity: 0.9 }, { scale: 4.5, opacity: 0, duration: 0.8, ease: 'expo.out' }, T.drop);
+      G.burst.forEach((c, i) => {
+        tl.fromTo('#b-' + i, { x: 0, y: 0, scale: 0.2, rotation: 0, opacity: 0 },
+          { x: c.x, y: c.y, scale: 1, rotation: c.r, opacity: 1, duration: 0.9, ease: 'expo.out' }, T.drop + 0.02 + (i % 3) * 0.02);
+        tl.to('#b-' + i, { x: c.x * 1.12, y: c.y * 1.12, rotation: c.r * 1.6, duration: T.end - T.drop - 0.9, ease: 'sine.out' }, T.drop + 0.92);
+      });
+      // The real app rises out of the drop: three phones fanning out.
+      const ph = G.phones;
+      gsap.set('#phones', { autoAlpha: 0 });
+      show('#phones', T.drop);
+      tl.fromTo('#phone-c', { y: G.H * 0.75, rotationX: 45, scale: ph.scale * 0.85 }, { y: 0, rotationX: 0, scale: ph.scale, duration: 1.1, ease: 'expo.out' }, T.drop + 0.05);
+      [['#phone-l', -1], ['#phone-r', 1]].forEach(([el, side]) => {
+        tl.fromTo(el,
+          { x: 0, y: G.H * 0.75, rotationX: 45, rotationY: 0, rotationZ: 0, scale: ph.side * 0.85 },
+          { x: side * ph.dx, y: 0, rotationX: 0, rotationY: -side * 16, rotationZ: side * 8, scale: ph.side, duration: 1.2, ease: 'expo.out' },
+          T.drop + 0.16);
+      });
+      tl.fromTo('#phones', { y: 0 }, { y: -18, duration: T.end - T.drop - 1.1, ease: 'sine.inOut' }, T.drop + 1.1);
+      wordsIn('#lockup-title', T.drop + 0.35, 0.08);
+      tl.fromTo('#lockup-url', { opacity: 0, y: 20, scale: 1.15 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: 'expo.out' }, T.drop + 0.6);
+      tl.fromTo('#lockup', { scale: 1 }, { scale: 1.04, duration: T.end - T.drop, ease: 'sine.inOut' }, T.drop);
+
+      tl.set({}, {}, 15);
+      window.__timelines = window.__timelines || {};
+      window.__timelines['dacus-trailer-landscape'] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

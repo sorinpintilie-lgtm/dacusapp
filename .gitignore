@@ -25,3 +25,14 @@ GoogleService-Info.plist
 google-services.json
 *firebase-adminsdk*.json
 
+
+# Local Claude Code state
+.claude/worktrees/
+.claude/settings.local.json
+.claude/launch.json
+
+# Trailer projects: generated/working files (landscape assets are copied by build.mjs)
+videos/*/.hyperframes/
+videos/*/renders/
+videos/dacus-trailer-landscape/assets/
+videos/*/.thumbnails/

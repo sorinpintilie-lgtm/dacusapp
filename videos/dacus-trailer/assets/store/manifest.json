@@ -1,0 +1,210 @@
+{
+  "photos": [
+    {
+      "id": "constructii-si-renovare",
+      "name": "Construcții și Renovare"
+    },
+    {
+      "id": "electrice-si-iluminat",
+      "name": "Electrice și Iluminat"
+    },
+    {
+      "id": "casa-si-gradina",
+      "name": "Casă și Grădină"
+    },
+    {
+      "id": "baie-si-instalatii",
+      "name": "Baie și Instalații"
+    },
+    {
+      "id": "bucatarie-si-dining",
+      "name": "Bucătărie și Dining"
+    },
+    {
+      "id": "mobilier",
+      "name": "Mobilier"
+    },
+    {
+      "id": "scule-si-unelte",
+      "name": "Scule și Unelte"
+    },
+    {
+      "id": "electronice-gadgeturi",
+      "name": "Electronice & Gadgeturi"
+    },
+    {
+      "id": "curatenie-si-intretinere",
+      "name": "Curățenie și Întreținere"
+    },
+    {
+      "id": "jucarii-si-copii",
+      "name": "Jucării și Copii"
+    },
+    {
+      "id": "auto-si-moto",
+      "name": "Auto și Moto"
+    },
+    {
+      "id": "craciun",
+      "name": "Craciun"
+    }
+  ],
+  "products": [
+    {
+      "id": "cafetiera-prin",
+      "name": "Cafetieră prin picurare cu vas de sticlă de 1,5 l și 1000 W Teesa AROMA 100 TSA4006",
+      "price": 109.9,
+      "oldPrice": 129.9
+    },
+    {
+      "id": "bec-led",
+      "name": "Bec Led A60 E27 9w Verde",
+      "price": 16.9,
+      "oldPrice": null
+    },
+    {
+      "id": "masina-de",
+      "name": "Mașină de găurit verticală, 350 W, 5 viteze, mandrină 13 mm TRYTON TWS351",
+      "price": 669.9,
+      "oldPrice": null
+    },
+    {
+      "id": "polizor-unghiular",
+      "name": "Polizor unghiular 125 mm, 750 W, compact, Vulcan VZS125F",
+      "price": 199.9,
+      "oldPrice": null
+    },
+    {
+      "id": "plafonier",
+      "name": "Plafoniera Led 24w Ip44 Cu Senzor 4000k Alb Neutru - Negru",
+      "price": 119.9,
+      "oldPrice": null
+    },
+    {
+      "id": "baterie-lavoar",
+      "name": "Baterie Lavoar Joko, Crom",
+      "price": 74.9,
+      "oldPrice": null
+    },
+    {
+      "id": "set-chei",
+      "name": "Set chei negative CR-VA sferice lungi 1.5-10 mm, 9 piese PROLINE 48329",
+      "price": 38.9,
+      "oldPrice": null
+    },
+    {
+      "id": "ghiveci",
+      "name": "Floare Artificiala În Ghiveci  85 Cm",
+      "price": 169.9,
+      "oldPrice": null
+    },
+    {
+      "id": "ventilator",
+      "name": "Ventilator Standard, Diam 100 Mm, Cap 95 Mc/h",
+      "price": 13.9,
+      "oldPrice": null
+    },
+    {
+      "id": "aspirator",
+      "name": "Aspirator Albatros Urban 90 Eco",
+      "price": 249.9,
+      "oldPrice": null
+    },
+    {
+      "id": "fierbator",
+      "name": "Fierbator Apa 2200 W 1.5 L Alb Philips",
+      "price": 149.9,
+      "oldPrice": null
+    },
+    {
+      "id": "tigaie",
+      "name": "Tigaie antiaderentă Unlimited de 24 cm pentru inducție Tefal T-G2550472",
+      "price": 199.9,
+      "oldPrice": null
+    },
+    {
+      "id": "scaun",
+      "name": "Scaun Directorial Us97 Saga",
+      "price": 589.9,
+      "oldPrice": null
+    },
+    {
+      "id": "lampa",
+      "name": "Lampă de veghe cu senzor de mișcare LED 0,5 W alb rece Rebel ZAR0507",
+      "price": 19.9,
+      "oldPrice": null
+    },
+    {
+      "id": "furtun",
+      "name": "Furtun De Alimentare 2 M, 22c, H3/4 Tucai",
+      "price": 21.9,
+      "oldPrice": null
+    },
+    {
+      "id": "prelungitor",
+      "name": "Prelungitor pentru grădină pe picior cu 3 prize IP44 și cablu de 1,5 m URZ3259",
+      "price": 46.11,
+      "oldPrice": null
+    },
+    {
+      "id": "ciocan",
+      "name": "Ciocan Rotopercutor - Sds.plus / 20v/4.0a/2b / 2j",
+      "price": 999.9,
+      "oldPrice": null
+    },
+    {
+      "id": "surubelnita",
+      "name": "Set Surubelnita Si Biti Precizie 32 Piese Reb",
+      "price": 29.9,
+      "oldPrice": null
+    },
+    {
+      "id": "mixer",
+      "name": "Mixer de mână cu 5 viteze și funcție turbo de 400 W Teesa TSA3536",
+      "price": 129.99,
+      "oldPrice": 149.9
+    },
+    {
+      "id": "boxa",
+      "name": "Boxă Bluetooth cu proiector LED cu 10 efecte de lumină și Bluetooth 5.0 Rebel ZAR0557",
+      "price": 79.9,
+      "oldPrice": null
+    },
+    {
+      "id": "trotineta",
+      "name": "Trotinetă electrică pliabilă cu motor de 350 W și autonomie până la 45 km Rebel ZAB0032",
+      "price": 3599.9,
+      "oldPrice": null
+    },
+    {
+      "id": "oglinda",
+      "name": "Corp Soldat Pe Oglinda",
+      "price": 499.9,
+      "oldPrice": null
+    },
+    {
+      "id": "canapea",
+      "name": "Set Canapea Cu 2 Fotolii Si Masuta Cafea Aber",
+      "price": 1499.9,
+      "oldPrice": null
+    },
+    {
+      "id": "drujba",
+      "name": "Drujba Mp 5200 52cc 2.9cp 2 Llame-16\" +2 Lanturi",
+      "price": 489.9,
+      "oldPrice": null
+    },
+    {
+      "id": "cort",
+      "name": "Cortină luminoasă LED cu stele și lumină albă caldă de 2 × 1 m cu 138 LED-uri Rebel ZAR0570",
+      "price": 78.9,
+      "oldPrice": null
+    },
+    {
+      "id": "perna",
+      "name": "Perna Matlasata Bamboo 50/70",
+      "price": 34.9,
+      "oldPrice": null
+    }
+  ]
+}
