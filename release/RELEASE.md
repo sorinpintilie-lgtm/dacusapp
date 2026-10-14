@@ -15,26 +15,15 @@ phone, the store accounts, or a production deploy.
   adaptive icon inside the safe zone, privacy/terms links and account deletion in Setări.
 - Store texts, privacy answers and screenshots: `release/STORE-LISTING.md`, `release/store-assets/`.
 
-## 1. Deploy the backend (required before release)
+## 1. Backend — deployed 14 Oct 2026 ✅
 
-The app's account features depend on server fixes that are committed but **not deployed yet**
-(profiles for accounts created in the app, account deletion, Firestore with the runtime credentials).
-
-```bash
-npm run firebase:deploy
-```
-
-Then check the live API:
+Deployed commit `2d4aefb` with `npm run firebase:deploy` (run it from the main checkout: the deploy
+reads `functions/.env`, which is not in git). Live check:
 
 ```bash
-curl https://europe-west1-dacus-b40f9.cloudfunctions.net/api/health
+curl https://europe-west1-dacus-b40f9.cloudfunctions.net/api/health   # "storage":"firestore","auth":"firebase"
+node scripts/smoke-api.mjs                                           # all passing
 ```
-
-It must report `"storage":"firestore"` and `"auth":"firebase"`. If it says `memory`, accounts, carts and
-orders are not being saved: set `DACUS_FIREBASE_ENABLED=true` (and the service-account keys) in the
-functions environment, or check that the function's service account has Firestore access.
-
-Finally `node scripts/smoke-api.mjs` should print `all passing`.
 
 ## 2. Test on real phones (needs you)
 
