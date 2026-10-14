@@ -481,12 +481,15 @@ function useAppState() {
       haptics.success();
       showToast('Adăugat în coș', { actionLabel: 'Vezi coșul', onAction: openCart });
     }
-    void sendAnalyticsEvents([
-      {
-        name: 'add_to_cart',
-        payload: { productId, variantId: resolvedVariantId ?? null, page: currentRouteName() ?? 'unknown' },
-      },
-    ]);
+    // Only with the "Statistici anonime" consent on (Setări → Confidențialitate).
+    if (effectiveAccountSettings.privacy.analyticsConsent.granted) {
+      void sendAnalyticsEvents([
+        {
+          name: 'add_to_cart',
+          payload: { productId, variantId: resolvedVariantId ?? null, page: currentRouteName() ?? 'unknown' },
+        },
+      ]);
+    }
   });
 
   const changeQuantity = useStableCallback((productId: string, variantId: string | undefined, delta: number) => {
