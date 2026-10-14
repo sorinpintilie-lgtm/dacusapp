@@ -21,7 +21,29 @@ export const initFirebaseAuth = (projectId: string, clientEmail: string, private
   return firebaseAuthInstance;
 };
 
+/**
+ * On Google Cloud (Cloud Functions / Cloud Run) the runtime already has the project's credentials, so ID
+ * tokens can be verified without a service-account key. Also used with the local Auth emulator.
+ */
+export const runningOnGoogleCloud = () => !!(process.env.K_SERVICE || process.env.FUNCTION_TARGET);
+
+export const initFirebaseAuthWithDefaultCredentials = () => {
+  const hasDefaultApp = admin.apps.some((app) => app?.name === '[DEFAULT]');
+  if (!hasDefaultApp) admin.initializeApp();
+  firebaseAuthInstance = admin.auth();
+  return firebaseAuthInstance;
+};
+
 export const getFirebaseAuth = () => firebaseAuthInstance;
+
+const firebaseUserExists = async (auth: Auth, uid: string) => {
+  try {
+    await auth.getUser(uid);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -68,6 +90,8 @@ export type SessionContext = {
   session: { userId: string; createdAt: string };
   user: { id: string; email: string; name: string; createdAt: string; passwordHash?: string };
   isFirebaseUser?: boolean;
+  /** Firebase Auth uid, when the request was signed with a Firebase ID token. */
+  firebaseUid?: string;
 };
 
 export const getSessionContext = async (
@@ -79,18 +103,38 @@ export const getSessionContext = async (
 
   const firebaseAuth = getFirebaseAuth();
   if (firebaseAuth) {
+    let decoded: Awaited<ReturnType<typeof firebaseAuth.verifyIdToken>> | null = null;
     try {
-      const decoded = await firebaseAuth.verifyIdToken(token);
-      const user = await store.getUserByEmail(decoded.email || '');
-      if (user) {
-        return {
-          token,
-          session: { userId: user.id, createdAt: new Date().toISOString() },
-          user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
-          isFirebaseUser: true,
-        };
-      }
-    } catch {}
+      decoded = await firebaseAuth.verifyIdToken(token);
+    } catch {
+      decoded = null;
+    }
+    if (decoded?.email) {
+      const email = normalizeEmail(decoded.email);
+      const existing = await store.getUserByEmail(email);
+      // A token outlives a deleted account by up to an hour; don't bring the profile back from it.
+      if (!existing && !(await firebaseUserExists(firebaseAuth, decoded.uid))) return null;
+      // Accounts created in the app exist only in Firebase Auth at first: give them a store profile on
+      // first use. The id comes from the uid, so concurrent first requests write the same user.
+      const user =
+        existing ??
+        (await store.createUser({
+          id: `fb-${decoded.uid}`,
+          email,
+          passwordHash: '',
+          name:
+            (typeof decoded.name === 'string' && decoded.name.trim()) ||
+            email.split('@')[0] ||
+            'Client Dacus',
+        }));
+      return {
+        token,
+        session: { userId: user.id, createdAt: new Date().toISOString() },
+        user: { id: user.id, email: user.email, name: user.name, createdAt: user.createdAt },
+        isFirebaseUser: true,
+        firebaseUid: decoded.uid,
+      };
+    }
   }
 
   const session = await store.getSessionByToken(token);

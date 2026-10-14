@@ -19,7 +19,13 @@ import {
   ChangePasswordSchema,
   type AccountSettingsPatchInput,
 } from '../schemas/validation.js';
-import { getSessionContext, hashPassword, parseAddressDraft, verifyPassword } from './utils.js';
+import {
+  getFirebaseAuth,
+  getSessionContext,
+  hashPassword,
+  parseAddressDraft,
+  verifyPassword,
+} from './utils.js';
 
 type AccountRoutesOptions = {
   store?: CommerceStore;
@@ -236,6 +242,41 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (fa
       selectedAddressId: await store.getSelectedAddressId(sessionCtx.user.id),
     };
   });
+
+  // Account deletion, required by the App Store for apps that let people sign up: removes the store
+  // profile and everything kept for it, then the Firebase login itself.
+  fastify.delete(
+    '/account',
+    { config: { rateLimit: { max: 3, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);
+      if (!sessionCtx) {
+        reply.code(401);
+        return {
+          error: 'Unauthorized.',
+          errorRo: 'Sesiunea a expirat. Te rugăm să te autentifici din nou.',
+        };
+      }
+
+      await store.deleteUserData(sessionCtx.user.id);
+      const firebaseAuth = getFirebaseAuth();
+      if (sessionCtx.firebaseUid && firebaseAuth) {
+        try {
+          await firebaseAuth.deleteUser(sessionCtx.firebaseUid);
+        } catch (error) {
+          if ((error as { code?: string }).code !== 'auth/user-not-found') {
+            request.log.error({ err: error }, 'account deletion: Firebase user not removed');
+            reply.code(500);
+            return {
+              error: 'Account data removed, but the login could not be deleted. Try again.',
+              errorRo: 'Datele au fost șterse, dar contul de autentificare nu. Încearcă din nou.',
+            };
+          }
+        }
+      }
+      return { ok: true };
+    },
+  );
 
   fastify.delete('/account/addresses/:addressId', async (request, reply) => {
     const sessionCtx = await getSessionContext(store, request.headers as Record<string, unknown>);

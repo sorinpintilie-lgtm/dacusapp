@@ -177,10 +177,14 @@ export type CommerceStore = {
   getUserById: (id: string) => Promise<CommerceUser | null>;
   setUserPasswordHash: (userId: string, passwordHash: string) => Promise<boolean>;
   createUser: (input: {
+    /** Fixed id (e.g. derived from the Firebase uid) so repeated provisioning writes the same user. */
+    id?: string;
     email: string;
     passwordHash: string;
     name: string;
   }) => Promise<CommerceUser>;
+  /** Removes everything stored for the user (account deletion). */
+  deleteUserData: (userId: string) => Promise<void>;
   createSession: (userId: string) => Promise<CommerceSession>;
   getSessionByToken: (token: string) => Promise<CommerceSession | null>;
   deleteSession: (token: string) => Promise<void>;
@@ -447,12 +451,13 @@ class InMemoryCommerceStore implements CommerceStore {
   }
 
   async createUser(input: {
+    id?: string;
     email: string;
     passwordHash: string;
     name: string;
   }): Promise<CommerceUser> {
     const user: CommerceUser = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       email: input.email,
       passwordHash: input.passwordHash,
       name: input.name,
@@ -462,6 +467,32 @@ class InMemoryCommerceStore implements CommerceStore {
     this.usersById.set(user.id, user);
     this.usersByEmail.set(user.email, user);
     return user;
+  }
+
+  async deleteUserData(userId: string): Promise<void> {
+    const user = this.usersById.get(userId);
+    if (user) this.usersByEmail.delete(user.email);
+    this.usersById.delete(userId);
+    for (const [token, session] of this.sessionsByToken) {
+      if (session.userId === userId) this.sessionsByToken.delete(token);
+    }
+    for (const map of [
+      this.cartsByUserId,
+      this.ordersByUserId,
+      this.wishlistByUserId,
+      this.notificationsByUserId,
+      this.settingsByUserId,
+      this.addressesByUserId,
+      this.selectedAddressByUserId,
+      this.devicesByUserId,
+      this.backInStockByUserId,
+      this.loyaltyByUserId,
+    ]) {
+      map.delete(userId);
+    }
+    for (let index = this.analyticsEvents.length - 1; index >= 0; index -= 1) {
+      if (this.analyticsEvents[index]?.userId === userId) this.analyticsEvents.splice(index, 1);
+    }
   }
 
   async createSession(userId: string): Promise<CommerceSession> {
@@ -590,6 +621,20 @@ class InMemoryCommerceStore implements CommerceStore {
   }
 }
 
+// Every collection that keeps one document per user, keyed by the user id.
+const USER_COLLECTIONS = [
+  'commerce_users',
+  'commerce_carts',
+  'commerce_orders',
+  'commerce_wishlists',
+  'commerce_notifications',
+  'commerce_user_settings',
+  'commerce_addresses',
+  'commerce_devices',
+  'commerce_back_in_stock',
+  'commerce_loyalty',
+];
+
 class FirestoreCommerceStore implements CommerceStore {
   constructor(private readonly db: Firestore) {}
 
@@ -619,12 +664,13 @@ class FirestoreCommerceStore implements CommerceStore {
   }
 
   async createUser(input: {
+    id?: string;
     email: string;
     passwordHash: string;
     name: string;
   }): Promise<CommerceUser> {
     const user: CommerceUser = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       email: input.email,
       passwordHash: input.passwordHash,
       name: input.name,
@@ -632,6 +678,18 @@ class FirestoreCommerceStore implements CommerceStore {
     };
     await this.db.collection('commerce_users').doc(user.id).set(user);
     return user;
+  }
+
+  async deleteUserData(userId: string): Promise<void> {
+    const batch = this.db.batch();
+    for (const name of USER_COLLECTIONS) batch.delete(this.db.collection(name).doc(userId));
+    const [sessions, events] = await Promise.all([
+      this.db.collection('commerce_sessions').where('userId', '==', userId).get(),
+      this.db.collection('commerce_analytics').where('userId', '==', userId).get(),
+    ]);
+    sessions.docs.forEach((doc) => batch.delete(doc.ref));
+    events.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
   }
 
   async createSession(userId: string): Promise<CommerceSession> {
@@ -889,11 +947,16 @@ class StrictCommerceStore implements CommerceStore {
   }
 
   async createUser(input: {
+    id?: string;
     email: string;
     passwordHash: string;
     name: string;
   }): Promise<CommerceUser> {
     return this.run('createUser', () => this.primary.createUser(input));
+  }
+
+  async deleteUserData(userId: string): Promise<void> {
+    return withTimeout(this.primary.deleteUserData(userId), 15000, 'deleteUserData');
   }
 
   async createSession(userId: string): Promise<CommerceSession> {

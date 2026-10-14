@@ -77,8 +77,8 @@ const scheduleCatalogRefresh = (app: Awaited<ReturnType<typeof Fastify>>, env: S
     const nowInUtc = now.getTime();
 
     // Bucharest is UTC+3, so 2 AM Bucharest = 23:00 UTC previous day
-    let targetHour = 2 - 3; // 2 AM Bucharest - 3 = 23 UTC
-    let targetDate = new Date(now);
+    const targetHour = 2 - 3; // 2 AM Bucharest - 3 = 23 UTC
+    const targetDate = new Date(now);
     targetDate.setUTCHours(targetHour, 0, 0, 0);
 
     // If 23:00 UTC has passed today, target is tomorrow
@@ -182,9 +182,16 @@ export const buildServer = async (env: BuildServerEnv) => {
     timeWindow: RATE_LIMIT_CONFIG.default.timeWindow,
   });
 
-  app.register(healthRoutes);
+  // On Google Cloud, use the project's own credentials unless Firebase was explicitly switched off.
+  const firebaseExplicitlyDisabled = ['false', '0', 'no', 'off'].includes(
+    (process.env.FIREBASE_ENABLED ?? '').trim().toLowerCase(),
+  );
+  const { runningOnGoogleCloud } = await import('./routes/utils.js');
+  const useDefaultCredentials =
+    !firebaseExplicitlyDisabled && (runningOnGoogleCloud() || !!process.env.FIREBASE_AUTH_EMULATOR_HOST);
   const firestore = createFirestoreClient({
     enabled: env.FIREBASE_ENABLED,
+    useDefaultCredentials,
     ...(env.FIREBASE_PROJECT_ID ? { projectId: env.FIREBASE_PROJECT_ID } : {}),
     ...(env.FIREBASE_CLIENT_EMAIL ? { clientEmail: env.FIREBASE_CLIENT_EMAIL } : {}),
     ...(env.FIREBASE_PRIVATE_KEY ? { privateKey: env.FIREBASE_PRIVATE_KEY } : {}),
@@ -195,7 +202,7 @@ export const buildServer = async (env: BuildServerEnv) => {
     ...(env.FIREBASE_STORAGE_BUCKET ? { storageBucket: env.FIREBASE_STORAGE_BUCKET } : {}),
   });
 
-  const { initFirebaseAuth } = await import('./routes/utils.js');
+  const { initFirebaseAuth, initFirebaseAuthWithDefaultCredentials } = await import('./routes/utils.js');
   if (
     env.FIREBASE_ENABLED &&
     env.FIREBASE_PROJECT_ID &&
@@ -207,7 +214,15 @@ export const buildServer = async (env: BuildServerEnv) => {
       env.FIREBASE_CLIENT_EMAIL,
       env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     );
+  } else if (useDefaultCredentials) {
+    initFirebaseAuthWithDefaultCredentials();
   }
+
+  // Lets a deploy be checked from outside: which store and which login verification are live.
+  app.register(healthRoutes, {
+    storage: firestore ? 'firestore' : 'memory',
+    auth: useDefaultCredentials || env.FIREBASE_PRIVATE_KEY ? 'firebase' : 'off',
+  });
 
   const catalogStore = createCatalogStore(firestore);
   const testCommerceStore = env.NODE_ENV === 'test' ? createInMemoryCommerceStore() : null;

@@ -457,6 +457,11 @@ export const onAuthChange = (callback: (user: User | null) => void): (() => void
   });
 };
 
+/** Deletes the account and everything stored for it on the server, including the login. */
+export const deleteAccount = async (): Promise<void> => {
+  await apiRequest('/account', { method: 'DELETE', auth: true });
+};
+
 export const requestPasswordReset = async (email: string): Promise<void> => {
   await apiRequest('/auth/reset-password-request', { method: 'POST', body: { email } });
 };

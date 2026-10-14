@@ -11,6 +11,7 @@ import {
   checkoutCart,
   checkoutCartGuest,
   createAddress,
+  deleteAccount as deleteAccountRequest,
   deleteAddress as deleteAddressRequest,
   fetchAccountSettings,
   fetchAddresses,
@@ -963,6 +964,21 @@ function useAppState() {
 
   const clearAuthError = useStableCallback(() => setAuthError(null));
 
+  const deleteAccount = useStableCallback(async () => {
+    setAuthBusy(true);
+    try {
+      await deleteAccountRequest();
+    } catch (error) {
+      setAuthBusy(false);
+      showToast(errorMessage(error, 'Nu am putut șterge contul. Încearcă din nou.'), 'error');
+      return false;
+    }
+    await logout();
+    showToast('Contul tău a fost șters.');
+    goHome();
+    return true;
+  });
+
   const logout = useStableCallback(async () => {
     setAuthBusy(true);
     try {
@@ -1436,6 +1452,7 @@ function useAppState() {
     login,
     register,
     requestPasswordReset,
+    deleteAccount,
     logout,
     orders,
     orderDetailsById,

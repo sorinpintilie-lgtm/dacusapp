@@ -13,6 +13,13 @@ export type FirebaseConfig = {
   databaseURL?: string;
   storageBucket?: string;
   emulatorHost?: string;
+  /** Use the runtime's own Google credentials (Cloud Functions) when no service-account key is set. */
+  useDefaultCredentials?: boolean;
+};
+
+const defaultCredentialsFirestore = (): Firestore => {
+  const app = getApps().find((item) => item.name === '[DEFAULT]') ?? initializeApp();
+  return getFirestore(app);
 };
 
 const normalizePrivateKey = (value: string) => value.replace(/\\n/g, '\n').trim();
@@ -40,8 +47,8 @@ const resolveApp = (
 };
 
 export const createFirestoreClient = (config: FirebaseConfig): Firestore | null => {
-  // If not enabled, return null (will use in-memory store)
-  if (!config.enabled) return null;
+  // Not configured: use the runtime credentials on Google Cloud, otherwise the in-memory store.
+  if (!config.enabled) return config.useDefaultCredentials ? defaultCredentialsFirestore() : null;
 
   // Try to load from service account file if provided
   let projectId = config.projectId;
@@ -71,6 +78,7 @@ export const createFirestoreClient = (config: FirebaseConfig): Firestore | null 
 
   // No valid credentials - return null (use in-memory store)
   if (!projectId || !clientEmail || !privateKey) {
+    if (config.useDefaultCredentials) return defaultCredentialsFirestore();
     console.log('[Firebase] No credentials, using in-memory store instead');
     return null;
   }

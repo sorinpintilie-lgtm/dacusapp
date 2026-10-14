@@ -1,6 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import type { AccountSettingsPatch } from '../services/commerce';
 import { useApp } from '../state/AppProvider';
@@ -36,6 +37,27 @@ function SwitchRow({ title, subtitle, value, disabled, onChange }: SwitchRowProp
   );
 }
 
+const PRIVACY_POLICY_URL = 'https://dacus.ro/policies/privacy-policy';
+const TERMS_URL = 'https://dacus.ro/policies/terms-of-service';
+
+const DELETE_TITLE = 'Ștergi contul?';
+const DELETE_MESSAGE =
+  'Contul, adresele, lista de favorite, punctele de fidelitate și setările se șterg definitiv. Comenzile plasate rămân înregistrate la magazin.';
+
+/** Account deletion always asks first (the App Store requires the option; nobody should hit it by accident). */
+function confirmDeleteAccount(onConfirm: () => void) {
+  if (Platform.OS === 'web') {
+    if (globalThis.confirm?.(`${DELETE_TITLE}
+
+${DELETE_MESSAGE}`)) onConfirm();
+    return;
+  }
+  Alert.alert(DELETE_TITLE, DELETE_MESSAGE, [
+    { text: 'Renunță', style: 'cancel' },
+    { text: 'Șterge contul', style: 'destructive', onPress: onConfirm },
+  ]);
+}
+
 export function SettingsScreen() {
   const navigation = useNavigation();
   const { show: showToast } = useToast();
@@ -49,6 +71,7 @@ export function SettingsScreen() {
     biometricLoginEnabled,
     toggleBiometricLogin,
     logout,
+    deleteAccount,
   } = useApp();
   const signedIn = !!accountUser;
 
@@ -296,9 +319,29 @@ export function SettingsScreen() {
           </ListSection>
         ) : null}
 
+        <ListSection title="Despre">
+          <ListItem
+            icon="shield-checkmark-outline"
+            title="Politica de confidențialitate"
+            onPress={() => void WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL)}
+          />
+          <ListItem
+            icon="document-text-outline"
+            title="Termeni și condiții"
+            onPress={() => void WebBrowser.openBrowserAsync(TERMS_URL)}
+          />
+        </ListSection>
+
         {signedIn ? (
           <ListSection>
             <ListItem icon="log-out-outline" title="Deconectare" destructive onPress={() => void logout()} />
+            <ListItem
+              icon="trash-outline"
+              title="Șterge contul"
+              subtitle="Datele contului se șterg definitiv"
+              destructive
+              onPress={() => confirmDeleteAccount(() => void deleteAccount())}
+            />
           </ListSection>
         ) : null}
       </ScrollView>

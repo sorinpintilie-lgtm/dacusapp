@@ -7,7 +7,7 @@ import {
   type CarrierService,
 } from '../services/carriers.js';
 import { sendPushNotification } from '../services/push.js';
-import { type CartLine, type Order, type DeviceRegistration } from '../services/commerceStore.js';
+import { type Order, type DeviceRegistration } from '../services/commerceStore.js';
 import { randomBytes } from 'node:crypto';
 
 interface OrderTrackingOptions {

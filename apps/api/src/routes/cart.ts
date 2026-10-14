@@ -146,7 +146,7 @@ const queryStorefront = async <T>(
     let responseText = '';
     try {
       responseText = await response.text();
-    } catch (e) {
+    } catch {
       responseText = 'Could not read response body';
     }
     console.error(`[STOREFRONT] Response body:`, responseText);
@@ -779,7 +779,7 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
         let checkoutUrl = '';
 
         // Create Shopify checkout for guest
-        const storefrontPayload = await queryStorefront(
+        const storefrontPayload = await queryStorefront<StorefrontCartCreateResult>(
           options,
           STOREFRONT_CART_CREATE_MUTATION,
           {
@@ -798,7 +798,7 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
               },
             },
           },
-        ) as any;
+        );
 
         const userErrors = storefrontPayload.cartCreate.userErrors ?? [];
         const cart = storefrontPayload.cartCreate.cart;
@@ -817,7 +817,7 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
           return {
             error: 'Shopify checkout creation failed.',
             errorRo: 'Nu s-a putut crea checkout-ul.',
-            details: userErrors.map((e: any) => e.message).join(', '),
+            details: userErrors.map((e) => e.message).join(', '),
           };
         }
 
@@ -839,7 +839,7 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
           if (!url.hostname.includes('myshopify.com')) {
             console.warn('[GUEST_CHECKOUT] Checkout URL does not point to Shopify:', checkoutUrl);
           }
-        } catch (error) {
+        } catch {
           console.error('[GUEST_CHECKOUT] Invalid checkout URL format:', checkoutUrl);
           reply.code(500);
           return {
@@ -868,57 +868,6 @@ export const cartRoutes: FastifyPluginAsync<CartRoutesOptions> = async (fastify,
       }
     },
   );
-
-fastify.get(
-  '/shopify-test',
-  async (request, reply) => {
-    console.log('[SHOPIFY_TEST] Testing basic connection...');
-    console.log('[SHOPIFY_TEST] Config:', {
-      domain: options.shopifyStoreDomain,
-      hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
-      tokenPrefix: options.storefrontToken?.substring(0, 6)
-    });
-
-    try {
-      // Simple test query to check if Shopify connection works
-      const testQuery = `
-        query {
-          shop {
-            name
-            primaryDomain {
-              url
-            }
-          }
-        }
-      `;
-
-      const result = await queryStorefront(options, testQuery, {});
-      console.log('[SHOPIFY_TEST] Success! Shop info:', (result as any).shop);
-      return {
-        success: true,
-        message: 'Shopify connection successful!',
-        shop: (result as any).shop,
-        config: {
-          domain: options.shopifyStoreDomain,
-          hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
-          tokenPrefix: options.storefrontToken?.substring(0, 6)
-        }
-      };
-    } catch (error) {
-      console.error('[SHOPIFY_TEST] Error details:', error);
-      return {
-        success: false,
-        message: 'Shopify connection failed',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        config: {
-          domain: options.shopifyStoreDomain,
-          hasToken: !!options.storefrontToken && options.storefrontToken !== 'replace-with-storefront-token',
-          tokenPrefix: options.storefrontToken?.substring(0, 6)
-        }
-      };
-    }
-  },
-);
 
 fastify.post(
   '/cart/validate-guest',
