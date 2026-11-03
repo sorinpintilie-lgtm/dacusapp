@@ -398,5 +398,54 @@ export const updateGuestCart = async (
   }));
 };
 
+/**
+ * Key-value storage for Firebase Auth's React Native persistence (the AsyncStorage interface), kept in
+ * one JSON file. Without it Firebase keeps the login in memory and every app restart logs the user out.
+ */
+const FIREBASE_AUTH_FILE = cacheRoot ? `${cacheRoot}firebase-auth-v1.json` : null;
+let firebaseAuthEntries: Record<string, string> | null = null;
+let firebaseAuthWrites: Promise<void> = Promise.resolve();
+
+const loadFirebaseAuthEntries = async (): Promise<Record<string, string>> => {
+  if (firebaseAuthEntries) return firebaseAuthEntries;
+  const fs = getFileSystem();
+  firebaseAuthEntries = {};
+  if (!fs || !FIREBASE_AUTH_FILE) return firebaseAuthEntries;
+  try {
+    const info = await fs.getInfoAsync(FIREBASE_AUTH_FILE);
+    if (info.exists) {
+      const parsed = JSON.parse(await fs.readAsStringAsync(FIREBASE_AUTH_FILE)) as unknown;
+      if (parsed && typeof parsed === 'object') firebaseAuthEntries = parsed as Record<string, string>;
+    }
+  } catch {
+    firebaseAuthEntries = {};
+  }
+  return firebaseAuthEntries;
+};
+
+const saveFirebaseAuthEntries = (entries: Record<string, string>) => {
+  const fs = getFileSystem();
+  if (!fs || !FIREBASE_AUTH_FILE) return Promise.resolve();
+  const file = FIREBASE_AUTH_FILE;
+  firebaseAuthWrites = firebaseAuthWrites
+    .then(() => fs.writeAsStringAsync(file, JSON.stringify(entries)))
+    .catch(() => undefined);
+  return firebaseAuthWrites;
+};
+
+export const firebaseAuthStorage = {
+  getItem: async (key: string): Promise<string | null> => (await loadFirebaseAuthEntries())[key] ?? null,
+  setItem: async (key: string, value: string): Promise<void> => {
+    const entries = await loadFirebaseAuthEntries();
+    entries[key] = value;
+    await saveFirebaseAuthEntries(entries);
+  },
+  removeItem: async (key: string): Promise<void> => {
+    const entries = await loadFirebaseAuthEntries();
+    delete entries[key];
+    await saveFirebaseAuthEntries(entries);
+  },
+};
+
 export type { StoredSession };
 export type { AppPreferences };

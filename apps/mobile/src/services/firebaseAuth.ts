@@ -1,5 +1,9 @@
+import * as firebaseAuthModule from 'firebase/auth';
 import {
+  EmailAuthProvider,
   getAuth,
+  initializeAuth,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
@@ -9,10 +13,12 @@ import {
   updateProfile,
   type User,
   type Auth,
+  type Persistence,
 } from 'firebase/auth';
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { Platform } from 'react-native';
+import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import { Firestore, getFirestore } from 'firebase/firestore';
-import { clearStoredSession } from './sessionStorage';
+import { clearStoredSession, firebaseAuthStorage } from './sessionStorage';
 
 let auth: Auth | null = null;
 let app: FirebaseApp | null = null;
@@ -27,10 +33,27 @@ export const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:216949470003:ios:deb857c248586904a90446',
 };
 
+// `getReactNativePersistence` exists only in Firebase's React Native build (which Metro picks), not in the
+// browser typings; without it the login lives in memory and is gone on the next app start.
+const { getReactNativePersistence } = firebaseAuthModule as unknown as {
+  getReactNativePersistence?: (storage: typeof firebaseAuthStorage) => Persistence;
+};
+
+const createAuth = (firebaseApp: FirebaseApp): Auth => {
+  if (Platform.OS === 'web' || !getReactNativePersistence) return getAuth(firebaseApp);
+  try {
+    return initializeAuth(firebaseApp, { persistence: getReactNativePersistence(firebaseAuthStorage) });
+  } catch {
+    // Already initialized (e.g. after a fast refresh): reuse that instance.
+    return getAuth(firebaseApp);
+  }
+};
+
 export const initFirebase = (): { auth: Auth; db: Firestore } => {
   if (!app) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
+    // Another module (callable functions) may have created the default app already.
+    app = getApps()[0] ?? initializeApp(firebaseConfig);
+    auth = createAuth(app);
     db = getFirestore(app);
   }
   return { auth: auth!, db: db! };
@@ -118,10 +141,17 @@ export const resetPasswordFirebase = async (email: string): Promise<void> => {
   await sendPasswordResetEmail(auth, email);
 };
 
-export const changePasswordFirebase = async (newPassword: string): Promise<void> => {
+/** Firebase asks for a recent login before a password change, so the current password is checked first. */
+export const changePasswordFirebase = async (currentPassword: string, newPassword: string): Promise<void> => {
   const user = getCurrentFirebaseUser();
-  if (!user) {
-    throw new Error('No user logged in');
+  if (!user?.email) {
+    throw new Error('Sesiunea a expirat. Intră din nou în cont.');
   }
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, currentPassword));
   await firebaseUpdatePassword(user, newPassword);
+};
+
+/** Resolves once Firebase has loaded the login saved on the device (if any). */
+export const waitForFirebaseAuth = async (): Promise<void> => {
+  await getFirebaseAuth().authStateReady();
 };

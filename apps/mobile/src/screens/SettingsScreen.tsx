@@ -7,6 +7,7 @@ import type { AccountSettingsPatch } from '../services/commerce';
 import { useApp } from '../state/AppProvider';
 import { colors, continuous, fonts, radii, spacing } from '../theme/tokens';
 import { AppText, Button, ListItem, ListSection, useToast } from '../ui';
+import { errorMessage } from '../utils/errorMessages';
 
 const SOURCE = 'mobile_app';
 
@@ -96,7 +97,7 @@ export function SettingsScreen() {
       await updateSettings(patch);
       showToast(successMessage);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Nu am putut salva setările.', 'error');
+      showToast(errorMessage(error, 'Nu am putut salva setările.'), 'error');
     } finally {
       setBusySection(null);
     }
@@ -134,7 +135,9 @@ export function SettingsScreen() {
       setNewPassword('');
       showToast('Parola a fost schimbată.');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Nu am putut schimba parola.', 'error');
+      const code = (error as { code?: string } | null)?.code;
+      const wrongCurrent = code === 'auth/invalid-credential' || code === 'auth/wrong-password';
+      showToast(wrongCurrent ? 'Parola curentă nu este corectă.' : errorMessage(error, 'Nu am putut schimba parola.'), 'error');
     } finally {
       setBusySection(null);
     }

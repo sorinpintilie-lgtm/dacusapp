@@ -41,7 +41,8 @@ const performRequest = async <T>(path: string, options?: ApiRequestOptions): Pro
   const headers: Record<string, string> = {};
 
   if (options?.auth) {
-    const firebaseToken = await getFirebaseIdToken(true);
+    // Firebase refreshes the token itself when it is close to expiring.
+    const firebaseToken = await getFirebaseIdToken();
     if (firebaseToken) {
       headers['Authorization'] = `Bearer ${firebaseToken}`;
     } else {

@@ -68,6 +68,7 @@ import { haptics } from '../ui/haptics';
 import { useToast } from '../ui/Toast';
 import { formatPrice } from '../utils/catalogFilters';
 import { checkCheckoutOutcome } from '../utils/checkoutStatus';
+import { errorMessage } from '../utils/errorMessages';
 import { isBroadCategoryName } from '../utils/string';
 import { useStableCallback } from '../utils/useStableCallback';
 import { describeFilters, SEARCH_DEFAULT_FILTERS, type ProductListFilters } from './productListFilters';
@@ -105,7 +106,6 @@ export type HomeSection = { category: CatalogCategory; products: CatalogProduct[
 
 const lineKey = (productId: string, variantId?: string) => `${productId}::${variantId ?? ''}`;
 
-const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 const buildFallbackCartProduct = (line: CartLine): CatalogProduct => {
   const fallbackPrice =
@@ -925,8 +925,8 @@ function useAppState() {
       setAuthError('Email invalid.');
       return false;
     }
-    if (password.length < 6) {
-      setAuthError('Parola trebuie să aibă minimum 6 caractere.');
+    if (password.length < 8) {
+      setAuthError('Parola trebuie să aibă minimum 8 caractere.');
       return false;
     }
 

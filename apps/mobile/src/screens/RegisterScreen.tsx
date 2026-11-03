@@ -64,8 +64,8 @@ export function RegisterScreen() {
       setStepError('Introdu o adresă de email validă.');
       return;
     }
-    if (password.length < 6) {
-      setStepError('Parola trebuie să aibă minimum 6 caractere.');
+    if (password.length < 8) {
+      setStepError('Parola trebuie să aibă minimum 8 caractere.');
       return;
     }
     setStepError(null);
@@ -113,7 +113,7 @@ export function RegisterScreen() {
               label="Parolă"
               value={password}
               onChangeText={setPassword}
-              placeholder="Minimum 6 caractere"
+              placeholder="Minimum 8 caractere"
               password
               autoCapitalize="none"
               autoComplete="new-password"

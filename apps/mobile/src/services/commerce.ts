@@ -6,6 +6,9 @@ import {
   logoutFromFirebase,
   getCurrentFirebaseUser,
   onFirebaseAuthChange,
+  changePasswordFirebase,
+  resetPasswordFirebase,
+  waitForFirebaseAuth,
 } from './firebaseAuth';
 import {
   getCart as getCartFromFn,
@@ -424,6 +427,7 @@ export const logoutAccount = async (): Promise<void> => {
 };
 
 export const restoreAccount = async (): Promise<User | null> => {
+  await waitForFirebaseAuth().catch(() => undefined);
   const firebaseUser = getCurrentFirebaseUser();
   if (!firebaseUser) return null;
 
@@ -462,8 +466,9 @@ export const deleteAccount = async (): Promise<void> => {
   await apiRequest('/account', { method: 'DELETE', auth: true });
 };
 
+// Accounts live in Firebase Auth, so Firebase sends the reset email (its own template and link).
 export const requestPasswordReset = async (email: string): Promise<void> => {
-  await apiRequest('/auth/reset-password-request', { method: 'POST', body: { email } });
+  await resetPasswordFirebase(email);
 };
 
 export const fetchCart = async (): Promise<CartLine[]> => {
@@ -725,11 +730,7 @@ export const changePassword = async (input: {
   currentPassword: string;
   newPassword: string;
 }): Promise<void> => {
-  await apiRequest('/account/security/change-password', {
-    method: 'POST',
-    auth: true,
-    body: input,
-  });
+  await changePasswordFirebase(input.currentPassword, input.newPassword);
 };
 
 export const fetchWishlist = async (): Promise<string[]> => {
