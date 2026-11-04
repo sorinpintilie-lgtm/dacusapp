@@ -10,13 +10,6 @@ import {
   resetPasswordFirebase,
   waitForFirebaseAuth,
 } from './firebaseAuth';
-import {
-  getCart as getCartFromFn,
-  addToCart as addToCartToFn,
-  removeFromCart as removeFromCartFromFn,
-  getAddresses as getAddressesFromFn,
-  addAddress as addAddressToFn,
-} from './functionsClient';
 import type { CatalogProduct } from '../data/catalog';
 
 type User = {
@@ -472,58 +465,41 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
 };
 
 export const fetchCart = async (): Promise<CartLine[]> => {
-  try {
-    return await getCartFromFn();
-  } catch {
-    const payload = await apiRequest<{ lines: CartLine[] }>('/cart', { auth: true });
-    return payload.lines;
-  }
+  const payload = await apiRequest<{ lines: CartLine[] }>('/cart', { auth: true });
+  return payload.lines;
 };
 
 export const upsertCartLine = async (line: CartLine): Promise<CartLine[]> => {
-  try {
-    return await addToCartToFn(line);
-  } catch {
-    const payload = await apiRequest<{ lines: CartLine[] }>('/cart/lines', {
-      method: 'PUT',
-      auth: true,
-      body: line,
-    });
-    return payload.lines;
-  }
+  const payload = await apiRequest<{ lines: CartLine[] }>('/cart/lines', {
+    method: 'PUT',
+    auth: true,
+    body: line,
+  });
+  return payload.lines;
 };
 
 export const replaceCartLines = async (lines: CartLine[]): Promise<CartLine[]> => {
-  try {
-    const { replaceCart } = await import('./functionsClient');
-    return await replaceCart({ lines });
-  } catch {
-    const payload = await apiRequest<{ lines: CartLine[] }>('/cart/replace', {
-      method: 'PUT',
-      auth: true,
-      body: { lines },
-    });
-    return payload.lines;
-  }
+  const payload = await apiRequest<{ lines: CartLine[] }>('/cart/replace', {
+    method: 'PUT',
+    auth: true,
+    body: { lines },
+  });
+  return payload.lines;
 };
 
 export const removeCartLine = async (
   productId: string,
   variantId?: string,
 ): Promise<CartLine[]> => {
-  try {
-    return await removeFromCartFromFn(productId, variantId);
-  } catch {
-    const query = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
-    const payload = await apiRequest<{ lines: CartLine[] }>(
-      `/cart/lines/${encodeURIComponent(productId)}${query}`,
-      {
-        method: 'DELETE',
-        auth: true,
-      },
-    );
-    return payload.lines;
-  }
+  const query = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
+  const payload = await apiRequest<{ lines: CartLine[] }>(
+    `/cart/lines/${encodeURIComponent(productId)}${query}`,
+    {
+      method: 'DELETE',
+      auth: true,
+    },
+  );
+  return payload.lines;
 };
 
 export const validateCart = async (): Promise<CartValidationResult> => {
@@ -574,7 +550,6 @@ export const checkoutCartGuest = async (input: {
   totalRon: number;
   currency: string;
 }> => {
-  console.log('Calling checkoutCartGuest with:', input);
   return apiRequest('/cart/checkout-guest', {
     method: 'POST',
     auth: false,
@@ -642,34 +617,17 @@ export const fetchOrderDetails = async (orderId: string): Promise<OrderDetailsPa
 };
 
 export const fetchAddresses = async (): Promise<AddressesPayload> => {
-  try {
-    const result = await getAddressesFromFn();
-    return {
-      addresses: result.addresses,
-      selectedAddressId: result.selectedAddressId,
-    };
-  } catch {
-    return apiRequest<AddressesPayload>('/account/addresses', { auth: true });
-  }
+  return apiRequest<AddressesPayload>('/account/addresses', { auth: true });
 };
 
 export const createAddress = async (
   draft: AddressDraft,
 ): Promise<{ address: Address } & AddressesPayload> => {
-  try {
-    const result = await addAddressToFn(draft);
-    return {
-      address: result.address,
-      addresses: [result.address],
-      selectedAddressId: result.address.id,
-    };
-  } catch {
-    return apiRequest<{ address: Address } & AddressesPayload>('/account/addresses', {
-      method: 'POST',
-      auth: true,
-      body: draft,
-    });
-  }
+  return apiRequest<{ address: Address } & AddressesPayload>('/account/addresses', {
+    method: 'POST',
+    auth: true,
+    body: draft,
+  });
 };
 
 export const updateAddress = async (

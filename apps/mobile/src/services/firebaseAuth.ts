@@ -17,12 +17,10 @@ import {
 } from 'firebase/auth';
 import { Platform } from 'react-native';
 import { getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { Firestore, getFirestore } from 'firebase/firestore';
 import { clearStoredSession, firebaseAuthStorage } from './sessionStorage';
 
 let auth: Auth | null = null;
 let app: FirebaseApp | null = null;
-let db: Firestore | null = null;
 
 export const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBmyVr52GxqB0igJJry00rNsbx0PlTz0Pg',
@@ -49,14 +47,12 @@ const createAuth = (firebaseApp: FirebaseApp): Auth => {
   }
 };
 
-export const initFirebase = (): { auth: Auth; db: Firestore } => {
+export const initFirebase = (): { auth: Auth } => {
   if (!app) {
-    // Another module (callable functions) may have created the default app already.
     app = getApps()[0] ?? initializeApp(firebaseConfig);
     auth = createAuth(app);
-    db = getFirestore(app);
   }
-  return { auth: auth!, db: db! };
+  return { auth: auth! };
 };
 
 export const getFirebaseAuth = (): Auth => {
@@ -65,14 +61,6 @@ export const getFirebaseAuth = (): Auth => {
     return a;
   }
   return auth;
-};
-
-export const getFirebaseDb = (): Firestore => {
-  if (!db) {
-    const { db: d } = initFirebase();
-    return d;
-  }
-  return db;
 };
 
 export type FirebaseUser = User;

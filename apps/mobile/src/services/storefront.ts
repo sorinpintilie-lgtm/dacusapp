@@ -1,5 +1,4 @@
 import { mobileEnv } from '../config/env';
-import { getCatalog as getCatalogFromFn, getCatalogStamp as getCatalogStampFromFn } from './functionsClient';
 
 type CatalogApiPayload = {
   categories: LiveCatalogCategory[];
@@ -570,70 +569,25 @@ const loadFromApi = async (options?: LoadCatalogOptions): Promise<LiveCatalogPay
 export const loadLiveCatalog = async (
   options?: LoadCatalogOptions,
 ): Promise<LiveCatalogPayload> => {
-  const after = options?.startAfterCursor ?? undefined;
-
   try {
-    const result = await getCatalogFromFn(after, options?.pageSize || 250);
-    const normalizedFromCallable: LiveCatalogPayload = {
-      categories: result.categories as LiveCatalogCategory[],
-      products: result.products as LiveCatalogProduct[],
-      hasMoreProducts: result.hasMoreProducts,
-      productsCursor: result.productsCursor,
-    };
-
-    const shouldBypassEmptyCallableCache =
-      !after &&
-      normalizedFromCallable.products.length === 0 &&
-      normalizedFromCallable.categories.length === 0;
-
-    if (!shouldBypassEmptyCallableCache) {
-      return normalizedFromCallable;
-    }
-  } catch (callableError) {
+    return await loadFromApi({
+      includeCategories: options?.includeCategories ?? true,
+      pageSize: options?.pageSize,
+      startAfterCursor: options?.startAfterCursor,
+      leanQuery: options?.leanQuery ?? true,
+    });
+  } catch (apiError) {
     try {
-      return await loadFromApi({
-        includeCategories: options?.includeCategories ?? true,
-        pageSize: options?.pageSize,
-        startAfterCursor: options?.startAfterCursor,
-        leanQuery: options?.leanQuery ?? true,
-      });
-    } catch (apiError) {
-      try {
-        return await loadFromStorefrontDirect(options);
-      } catch (storefrontError) {
-        throw new Error(
-          `callable=${callableError instanceof Error ? callableError.message : String(callableError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}`,
-        );
-      }
-    }
-  }
-
-  try {
-    return await loadFromStorefrontDirect(options);
-  } catch (storefrontError) {
-    try {
-      return await loadFromApi({
-        includeCategories: options?.includeCategories ?? true,
-        pageSize: options?.pageSize,
-        startAfterCursor: options?.startAfterCursor,
-        leanQuery: options?.leanQuery ?? true,
-      });
-    } catch (apiError) {
+      return await loadFromStorefrontDirect(options);
+    } catch (storefrontError) {
       throw new Error(
-        `callable=empty-cache; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}; api=${apiError instanceof Error ? apiError.message : String(apiError)}`,
+        `api=${apiError instanceof Error ? apiError.message : String(apiError)}; storefront=${storefrontError instanceof Error ? storefrontError.message : String(storefrontError)}`,
       );
     }
   }
 };
 
 export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> => {
-  try {
-    const result = await getCatalogStampFromFn();
-    return { stamp: result.stamp };
-  } catch {
-    // fallback to REST API below
-  }
-
   if (isLikelyLocalApiBaseUrl(mobileEnv.apiBaseUrl)) return null;
 
   const baseUrl = mobileEnv.apiBaseUrl.endsWith('/')
@@ -672,12 +626,7 @@ export const loadCatalogStamp = async (): Promise<CatalogStampPayload | null> =>
 
     return { stamp: payload.stamp };
   } catch {
-    try {
-      const result = await getCatalogFromFn(undefined, 1);
-      return { stamp: result.stamp ?? 'updated' };
-    } catch {
-      return null;
-    }
+    return null;
   }
 };
 
