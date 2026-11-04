@@ -31,9 +31,12 @@ node scripts/smoke-api.mjs                                           # all passi
 
 | Build | Profile | Link |
 | --- | --- | --- |
-| Android test APK (install directly on a phone) | `preview` | https://expo.dev/accounts/sorinpintilie/projects/dacusapp/builds/3bbab9e4-fbd7-43b9-958d-6f674a6c0c61 |
+| Android test APK (install directly on a phone; 4 Nov, tested on Android 15 and Android 9 emulators) | `preview` | https://expo.dev/accounts/sorinpintilie/projects/dacusapp/builds/3d3ceabf-afdd-41d4-8901-788e1e96db6f |
 | Android Play bundle (AAB, versionCode 4) | `production` | https://expo.dev/accounts/sorinpintilie/projects/dacusapp/builds/e793d0a3-103e-4363-85af-87bb870870eb |
 | iOS App Store build (1.0.0, build 68) | `production` | https://expo.dev/accounts/sorinpintilie/projects/dacusapp/builds/3a2e4e4b-75ea-4147-8551-0b40820f5636 |
+
+Give testers the APK link, not the `.aab`: a phone cannot install a Play bundle. Anyone who installed the
+app from Google Play must uninstall it before installing the APK (different signing key).
 
 iOS was sent to App Store Connect (app id `6760350768`, now in `eas.json`), so it appears in TestFlight
 once Apple finishes processing. Next releases: `eas build -p all --profile production` then
